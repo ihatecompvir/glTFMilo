@@ -27,8 +27,6 @@ namespace glTFMilo.Source
             if (image == null)
                 throw new InvalidOperationException("Failed to load input image from stream.");
 
-            // *** MOVE THE CHECK HERE ***
-            // Check dimensions *before* attempting BC1 compression
             if (image.Width % 4 != 0 || image.Height % 4 != 0)
                 throw new InvalidOperationException($"BC1 compression requires image dimensions to be multiples of 4. Current dimensions: {image.Width}x{image.Height}");
 
@@ -165,7 +163,8 @@ namespace glTFMilo.Source
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Please provide a file path.");
+                Console.WriteLine("glTFMilo - glTF to Milo converter");
+                Console.WriteLine("Usage: glTFMilo <input.gltf/glb> <output.milo> <platform (xbox/ps3)>");
                 return;
             }
             string filePath = args[0];

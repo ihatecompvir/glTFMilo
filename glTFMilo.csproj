@@ -8,15 +8,20 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SharpGLTF.Core" Version="1.0.3" />
-    <PackageReference Include="SharpZipLib" Version="1.4.2" />
-    <PackageReference Include="TeximpNet" Version="1.4.3" />
+    <Compile Remove="external\**" />
+    <EmbeddedResource Remove="external\**" />
+    <None Remove="external\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="MiloLib">
-      <HintPath>E:\GitHub Projects\MiloEditor\MiloLib\bin\Debug\netcoreapp8.0\MiloLib.dll</HintPath>
-    </Reference>
+    <PackageReference Include="SharpGLTF.Core" Version="1.0.3" />
+    <PackageReference Include="SharpZipLib" Version="1.4.2" />
+    <PackageReference Include="System.Resources.Extensions" Version="9.0.4" />
+    <PackageReference Include="TeximpNet" Version="1.4.3" />
   </ItemGroup>
+
+	<ItemGroup>
+	<ProjectReference Include="external\MiloEditor\MiloLib\MiloLib.csproj" />
+	</ItemGroup>
 
 </Project>
