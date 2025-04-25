@@ -1,0 +1,6 @@
+[submodule "MiloLib"]
+	path = MiloLib
+	url = https://github.com/ihatecompvir/MiloEditor
+[submodule "external/MiloEditor"]
+	path = external/MiloEditor
+	url = https://github.com/ihatecompvir/MiloEditor
