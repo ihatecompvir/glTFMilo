@@ -13,8 +13,11 @@ using System.Numerics;
 
 namespace glTFMilo.Source
 {
+
+
     internal class Program
     {
+
         // TODO: put these into their own class or something instead of randomyly at the top of this
         public static bool ConvertToDDS(Stream inputStream, string outputPath)
         {
@@ -181,6 +184,28 @@ namespace glTFMilo.Source
                 return;
             }
 
+            Game selectedGame = Game.RockBand3;
+            if (args.Length > 3)
+            {
+                string gameArg = args[3].ToLower();
+                if (gameArg == "tbrb")
+                {
+                    selectedGame = Game.TBRB;
+                }
+                else if (gameArg == "rb3")
+                {
+                    selectedGame = Game.RockBand3;
+                }
+                else
+                {
+                    Console.WriteLine("Invalid game specified. Defaulting to Rock Band 3.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("No game specified. Defaulting to Rock Band 3.");
+            }
+
             var model = ModelRoot.Load(filePath);
 
             DirectoryMeta meta = new DirectoryMeta();
@@ -204,7 +229,7 @@ namespace glTFMilo.Source
                 meta.platform = DirectoryMeta.Platform.Xbox;
             }
 
-            meta.revision = 28; // rb3's revision
+            meta.revision = GameRevisions.GetRevision(selectedGame).MiloRevision;
             meta.type = "Character"; // root is a character dir, in the future we should support more kinds of dirs
 
             // loop through all gltf nodes and create a milo asset that matches the type of node it is
@@ -250,6 +275,7 @@ namespace glTFMilo.Source
                                 var uvs = primitive.GetVertexAccessor("TEXCOORD_0")?.AsVector2Array();
                                 var tangents = primitive.GetVertexAccessor("TANGENT")?.AsVector4Array();
                                 var weights = primitive.GetVertexAccessor("WEIGHTS_0")?.AsVector4Array();
+                                var joints = primitive.GetVertexAccessor("JOINTS_0")?.AsVector4Array();
                                 var indices = primitive.IndexAccessor.AsIndicesArray();
 
                                 // if there are no positions this isn't going to be valid geometry, so just bail out
@@ -299,6 +325,16 @@ namespace glTFMilo.Source
                                         newVert.weight3 = weight.W;
                                     }
 
+                                    if (joints != null && originalIndex < joints.Count)
+                                    {
+                                        // i presume this to be correct, who knows if it is *shrug*
+                                        var joint = joints[(int)originalIndex];
+                                        newVert.bone0 = (ushort)joint.X;
+                                        newVert.bone1 = (ushort)joint.Y;
+                                        newVert.bone2 = (ushort)joint.Z;
+                                        newVert.bone3 = (ushort)joint.W;
+                                    }
+
                                     mesh.vertices.vertices.Add(newVert);
                                     ushort newIndex = (ushort)(mesh.vertices.vertices.Count - 1);
 
@@ -328,6 +364,57 @@ namespace glTFMilo.Source
                         {
                             throw new Exception("Too many primitives in Node! Make sure each node has only a single primitive.");
                         }
+
+                        /*
+                        // write bone transforms
+                        var skin = node.Skin; // Skin associated with this mesh node
+                        if (skin != null)
+                        {
+                            var inverseBindMatricesAccessor = skin.GetInverseBindMatricesAccessor();
+                            if (inverseBindMatricesAccessor != null)
+                            {
+                                var gltfInverseBindMatrices = inverseBindMatricesAccessor.AsMatrix4x4Array();
+                                var joints = skin.Joints;
+
+                                var boneTransList = new List<RndMesh.BoneTransform>();
+
+
+                                for (int i = 0; i < 1; i++)
+                                {
+                                    var jointNode = joints[i];
+                                    var gltfMatrix = gltfInverseBindMatrices[i];
+
+                                    var miloBoneTransform = new RndMesh.BoneTransform();
+
+                                    miloBoneTransform.name = jointNode.Name ?? $"joint_{i}";
+
+                                    miloBoneTransform.transform.m11 = 1.0f;
+                                    miloBoneTransform.transform.m12 = 0.0f;
+                                    miloBoneTransform.transform.m13 = 0.0f;
+                                    miloBoneTransform.transform.m21 = 0.0f;
+                                    miloBoneTransform.transform.m22 = 1.0f;
+                                    miloBoneTransform.transform.m23 = 0.0f;
+                                    miloBoneTransform.transform.m31 = 0.0f;
+                                    miloBoneTransform.transform.m32 = 0.0f;
+                                    miloBoneTransform.transform.m33 = 1.0f;
+                                    miloBoneTransform.transform.m41 = 0.0f;
+                                    miloBoneTransform.transform.m42 = 0.0f;
+                                    miloBoneTransform.transform.m43 = 0.0f;
+
+                                    boneTransList.Add(miloBoneTransform);
+                                }
+                                mesh.boneTransforms = boneTransList;
+
+
+                            }
+                            else
+                            {
+                                Console.WriteLine($"Warning: Skinned mesh node '{node.Name}' is linked to skin '{skin.Name ?? "Unnamed"}' which is missing the Inverse Bind Matrices accessor.");
+                            }
+                        }
+                        */
+
+
                     }
 
                     DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name, mesh);
@@ -367,9 +454,9 @@ namespace glTFMilo.Source
                 }
                 else if (IsGroupNode(node, model))
                 {
-                    RndGroup grp = RndGroup.New(0xE, 0);
-                    grp.trans = RndTrans.New(9, 0);
-                    grp.draw = RndDrawable.New(3, 0);
+                    RndGroup grp = RndGroup.New(GameRevisions.GetRevision(selectedGame).GroupRevision, 0);
+                    grp.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
+                    grp.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
                     List<string> children = GetAllDescendantNames(node);
                     if (children.Count > 0)
                     {
@@ -391,13 +478,13 @@ namespace glTFMilo.Source
             // loop through all materials
             foreach (var material in model.LogicalMaterials)
             {
-                RndMat mat = RndMat.New(0x44, 0);
+                RndMat mat = RndMat.New(GameRevisions.GetRevision(selectedGame).MatRevision, 0);
 
                 DirectoryMeta.Entry matEntry = new DirectoryMeta.Entry("Mat", material.Name, mat);
 
                 meta.entries.Add(matEntry);
 
-                RndTex tex = RndTex.New(0xB, 0);
+                RndTex tex = RndTex.New(GameRevisions.GetRevision(selectedGame).TextureRevision, 0);
                 tex.objFields.revision = 2;
 
                 var baseColorTexture = material.FindChannel("BaseColor")?.Texture;
@@ -505,7 +592,7 @@ namespace glTFMilo.Source
 
             }
 
-            Character character = Character.New(17, 0);
+            Character character = Character.New(GameRevisions.GetRevision(selectedGame).CharacterRevision, 0);
             character.viewports = new();
 
             // default empty viewports, still not sure what viewports even are
@@ -521,13 +608,13 @@ namespace glTFMilo.Source
             character.objFields.revision = 2;
 
             // give it a huge radius so it will always appear
-            character.anim = RndAnimatable.New(4, 0);
-            character.draw = RndDrawable.New(3, 0);
+            character.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
+            character.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
             character.draw.sphere.radius = 10000.0f;
-            character.trans = RndTrans.New(9, 0);
+            character.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
             character.sphereBase = meta.name;
 
-            character.charTest = Character.CharacterTesting.New(15, 0);
+            character.charTest = Character.CharacterTesting.New(GameRevisions.GetRevision(selectedGame).CharacterTestingRevision, 0);
             character.charTest.distMap = "none";
 
 
@@ -535,11 +622,11 @@ namespace glTFMilo.Source
             // TODO: GET RID OF THIS SHIT
             typeof(RndDir)
                 .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                .SetValue(character, (ushort)10);
+                .SetValue(character, (ushort)GameRevisions.GetRevision(selectedGame).RndDirRevision);
 
             typeof(ObjectDir)
                 .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                .SetValue(character, (ushort)27);
+                .SetValue(character, (ushort)GameRevisions.GetRevision(selectedGame).ObjectDirRevision);
 
             // todo: restore this but use the git commit hash
             //character.objFields.note = "Milo created with glTFMilo";
