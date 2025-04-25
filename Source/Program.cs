@@ -185,7 +185,8 @@ namespace glTFMilo.Source
 
             DirectoryMeta meta = new DirectoryMeta();
 
-            meta.name = args[0];
+            string filename = Path.GetFileNameWithoutExtension(filePath);
+            meta.name = filename;
 
             // check if second arg is "Ps3" or "xbox" to set platform
             string platform = args[2];
@@ -210,14 +211,12 @@ namespace glTFMilo.Source
             // TODO: add lights, possibly other kinds
             foreach (var node in model.LogicalNodes)
             {
-                // print name of node
-                Console.WriteLine($"{node.Name}");
                 if (IsPrimitive(node))
                 {
                     RndMesh mesh = RndMesh.New(33, 0, 0, 0);
                     mesh.objFields.revision = 2;
                     mesh.trans = RndTrans.New(9, 0);
-                    mesh.trans.parentObj = args[0];
+                    mesh.trans.parentObj = filename;
                     mesh.draw = RndDrawable.New(3, 0);
                     mesh.draw.sphere = new MiloLib.Classes.Sphere();
                     mesh.draw.sphere.radius = 10000.0f;
@@ -553,6 +552,8 @@ namespace glTFMilo.Source
             MiloFile miloFile = new MiloFile(meta);
 
             miloFile.Save(args[1], MiloFile.Type.Uncompressed, 0x810, MiloLib.Utils.Endian.LittleEndian, MiloLib.Utils.Endian.BigEndian);
+
+            Console.WriteLine("Milo scene created at " + args[1]);
         }
     }
 }
