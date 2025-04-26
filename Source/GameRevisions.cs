@@ -9,10 +9,10 @@ namespace glTFMilo.Source
     public enum Game
     {
         RockBand3,
-        TBRB,
-        RB1,
-        RB2,
-        GDRB,
+        TheBeatlesRockBand,
+        RockBand2,
+        RockBand1,
+        GreenDayRockBand,
     }
     public struct GameRevisions
     {
@@ -35,7 +35,7 @@ namespace glTFMilo.Source
                 milo: 28
             ),
             new GameRevisions(
-                Game.TBRB,
+                Game.TheBeatlesRockBand,
                 rndDir: 10,
                 model: 33,
                 objDir: 22,
@@ -48,6 +48,22 @@ namespace glTFMilo.Source
                 anim: 4,
                 group: 14,
                 charTest: 10,
+                milo: 25
+            ),
+            new GameRevisions(
+                Game.RockBand2,
+                rndDir: 10,
+                model: 33,
+                objDir: 20,
+                trans: 9,
+                draw: 3,
+                tex: 10,
+                bmp: 1,
+                mat: 47,
+                character: 12,
+                anim: 4,
+                group: 13,
+                charTest: 8,
                 milo: 25
             )
         };

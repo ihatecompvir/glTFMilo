@@ -10,6 +10,7 @@ using TeximpNet;
 using TeximpNet.Compression;
 using TeximpNet.DDS;
 using System.Numerics;
+using MiloLib.Assets.Band;
 
 namespace glTFMilo.Source
 {
@@ -190,11 +191,15 @@ namespace glTFMilo.Source
                 string gameArg = args[3].ToLower();
                 if (gameArg == "tbrb")
                 {
-                    selectedGame = Game.TBRB;
+                    selectedGame = Game.TheBeatlesRockBand;
                 }
                 else if (gameArg == "rb3")
                 {
                     selectedGame = Game.RockBand3;
+                }
+                else if (gameArg == "rb2")
+                {
+                    selectedGame = Game.RockBand2;
                 }
                 else
                 {
@@ -213,7 +218,7 @@ namespace glTFMilo.Source
             string filename = Path.GetFileNameWithoutExtension(filePath);
             meta.name = filename;
 
-            // check if second arg is "Ps3" or "xbox" to set platform
+            // check if second arg is "ps3" or "xbox" to set platform
             string platform = args[2];
             if (platform == "xbox")
             {
@@ -232,39 +237,42 @@ namespace glTFMilo.Source
             meta.revision = GameRevisions.GetRevision(selectedGame).MiloRevision;
             meta.type = "Character"; // root is a character dir, in the future we should support more kinds of dirs
 
+            List<(string, Matrix4x4)> bandConfigurationPositions = new();
+
             // loop through all gltf nodes and create a milo asset that matches the type of node it is
             // TODO: add lights, possibly other kinds
             foreach (var node in model.LogicalNodes)
             {
                 if (IsPrimitive(node))
                 {
-                    RndMesh mesh = RndMesh.New(33, 0, 0, 0);
-                    mesh.objFields.revision = 2;
-                    mesh.trans = RndTrans.New(9, 0);
-                    mesh.trans.parentObj = filename;
-                    mesh.draw = RndDrawable.New(3, 0);
-                    mesh.draw.sphere = new MiloLib.Classes.Sphere();
-                    mesh.draw.sphere.radius = 10000.0f;
-
-                    var localMatrix = node.LocalMatrix;
-                    mesh.trans.localXfm.m11 = localMatrix.M11;
-                    mesh.trans.localXfm.m12 = localMatrix.M12;
-                    mesh.trans.localXfm.m13 = localMatrix.M13;
-                    mesh.trans.localXfm.m21 = localMatrix.M21;
-                    mesh.trans.localXfm.m22 = localMatrix.M22;
-                    mesh.trans.localXfm.m23 = localMatrix.M23;
-                    mesh.trans.localXfm.m31 = localMatrix.M31;
-                    mesh.trans.localXfm.m32 = localMatrix.M32;
-                    mesh.trans.localXfm.m33 = localMatrix.M33;
-                    mesh.trans.localXfm.m41 = localMatrix.M41;
-                    mesh.trans.localXfm.m42 = localMatrix.M42;
-                    mesh.trans.localXfm.m43 = localMatrix.M43;
-
                     if (node.Mesh != null)
                     {
-                        if (node.Mesh.Primitives.Count == 1)
+                        int primitiveIndex = 0;
+                        foreach (var primitive in node.Mesh.Primitives)
                         {
-                            foreach (var primitive in node.Mesh.Primitives)
+                            RndMesh mesh = RndMesh.New(33, 0, 0, 0);
+                            mesh.objFields.revision = 2;
+                            mesh.trans = RndTrans.New(9, 0);
+                            mesh.trans.parentObj = filename;
+                            mesh.draw = RndDrawable.New(3, 0);
+                            mesh.draw.sphere = new MiloLib.Classes.Sphere();
+                            mesh.draw.sphere.radius = 10000.0f;
+
+                            var localMatrix = node.LocalMatrix;
+                            mesh.trans.localXfm.m11 = localMatrix.M11;
+                            mesh.trans.localXfm.m12 = localMatrix.M12;
+                            mesh.trans.localXfm.m13 = localMatrix.M13;
+                            mesh.trans.localXfm.m21 = localMatrix.M21;
+                            mesh.trans.localXfm.m22 = localMatrix.M22;
+                            mesh.trans.localXfm.m23 = localMatrix.M23;
+                            mesh.trans.localXfm.m31 = localMatrix.M31;
+                            mesh.trans.localXfm.m32 = localMatrix.M32;
+                            mesh.trans.localXfm.m33 = localMatrix.M33;
+                            mesh.trans.localXfm.m41 = localMatrix.M41;
+                            mesh.trans.localXfm.m42 = localMatrix.M42;
+                            mesh.trans.localXfm.m43 = localMatrix.M43;
+
+                            if (node.Mesh != null)
                             {
                                 if (primitive.Material != null)
                                 {
@@ -276,6 +284,7 @@ namespace glTFMilo.Source
                                 var tangents = primitive.GetVertexAccessor("TANGENT")?.AsVector4Array();
                                 var weights = primitive.GetVertexAccessor("WEIGHTS_0")?.AsVector4Array();
                                 var joints = primitive.GetVertexAccessor("JOINTS_0")?.AsVector4Array();
+                                var colors = primitive.GetVertexAccessor("COLOR_0")?.AsVector4Array();
                                 var indices = primitive.IndexAccessor.AsIndicesArray();
 
                                 // if there are no positions this isn't going to be valid geometry, so just bail out
@@ -318,16 +327,33 @@ namespace glTFMilo.Source
 
                                     if (weights != null && originalIndex < weights.Count)
                                     {
+                                        // write weights, if the mesh is not skinned
                                         var weight = weights[(int)originalIndex];
                                         newVert.weight0 = weight.X;
                                         newVert.weight1 = weight.Y;
                                         newVert.weight2 = weight.Z;
                                         newVert.weight3 = weight.W;
                                     }
+                                    else if (colors != null && originalIndex < colors.Count)
+                                    {
+                                        var vertexColors = colors[(int)originalIndex];
+                                        newVert.weight0 = vertexColors.X;
+                                        newVert.weight1 = vertexColors.Y;
+                                        newVert.weight2 = vertexColors.Z;
+                                        newVert.weight3 = vertexColors.W;
+                                    }
+                                    else
+                                    {
+                                        newVert.weight0 = 0.0f;
+                                        newVert.weight1 = 0.0f;
+                                        newVert.weight2 = 0.0f;
+                                        newVert.weight3 = 0.0f;
+                                    }
 
                                     if (joints != null && originalIndex < joints.Count)
                                     {
                                         // i presume this to be correct, who knows if it is *shrug*
+                                        // it seems to be, anyway
                                         var joint = joints[(int)originalIndex];
                                         newVert.bone0 = (ushort)joint.X;
                                         newVert.bone1 = (ushort)joint.Y;
@@ -358,92 +384,126 @@ namespace glTFMilo.Source
                                     mesh.faces.Add(face);
                                 }
 
+
                             }
-                        }
-                        else
-                        {
-                            throw new Exception("Too many primitives in Node! Make sure each node has only a single primitive.");
-                        }
 
-                        /*
-                        // write bone transforms
-                        var skin = node.Skin; // Skin associated with this mesh node
-                        if (skin != null)
-                        {
-                            var inverseBindMatricesAccessor = skin.GetInverseBindMatricesAccessor();
-                            if (inverseBindMatricesAccessor != null)
+
+                            /*
+                            // write bone transforms
+                            var skin = node.Skin; // Skin associated with this mesh node
+                            if (skin != null)
                             {
-                                var gltfInverseBindMatrices = inverseBindMatricesAccessor.AsMatrix4x4Array();
-                                var joints = skin.Joints;
-
-                                var boneTransList = new List<RndMesh.BoneTransform>();
-
-
-                                for (int i = 0; i < 1; i++)
+                                var inverseBindMatricesAccessor = skin.GetInverseBindMatricesAccessor();
+                                if (inverseBindMatricesAccessor != null)
                                 {
-                                    var jointNode = joints[i];
-                                    var gltfMatrix = gltfInverseBindMatrices[i];
+                                    var gltfInverseBindMatrices = inverseBindMatricesAccessor.AsMatrix4x4Array();
+                                    var joints = skin.Joints;
 
-                                    var miloBoneTransform = new RndMesh.BoneTransform();
+                                    var boneTransList = new List<RndMesh.BoneTransform>();
 
-                                    miloBoneTransform.name = jointNode.Name ?? $"joint_{i}";
 
-                                    miloBoneTransform.transform.m11 = 1.0f;
-                                    miloBoneTransform.transform.m12 = 0.0f;
-                                    miloBoneTransform.transform.m13 = 0.0f;
-                                    miloBoneTransform.transform.m21 = 0.0f;
-                                    miloBoneTransform.transform.m22 = 1.0f;
-                                    miloBoneTransform.transform.m23 = 0.0f;
-                                    miloBoneTransform.transform.m31 = 0.0f;
-                                    miloBoneTransform.transform.m32 = 0.0f;
-                                    miloBoneTransform.transform.m33 = 1.0f;
-                                    miloBoneTransform.transform.m41 = 0.0f;
-                                    miloBoneTransform.transform.m42 = 0.0f;
-                                    miloBoneTransform.transform.m43 = 0.0f;
+                                    for (int i = 0; i < 44; i++)
+                                    {
+                                        var jointNode = joints[i];
+                                        var gltfMatrix = gltfInverseBindMatrices[i];
 
-                                    boneTransList.Add(miloBoneTransform);
+                                        var miloBoneTransform = new RndMesh.BoneTransform();
+
+                                        miloBoneTransform.name = jointNode.Name ?? $"joint_{i}";
+
+                                        miloBoneTransform.transform.m11 = gltfMatrix.M11;
+                                        miloBoneTransform.transform.m12 = gltfMatrix.M12;
+                                        miloBoneTransform.transform.m13 = gltfMatrix.M13;
+                                        miloBoneTransform.transform.m21 = gltfMatrix.M21;
+                                        miloBoneTransform.transform.m22 = gltfMatrix.M22;
+                                        miloBoneTransform.transform.m23 = gltfMatrix.M23;
+                                        miloBoneTransform.transform.m31 = gltfMatrix.M31;
+                                        miloBoneTransform.transform.m32 = gltfMatrix.M32;
+                                        miloBoneTransform.transform.m33 = gltfMatrix.M33;
+                                        miloBoneTransform.transform.m41 = gltfMatrix.M41;
+                                        miloBoneTransform.transform.m42 = gltfMatrix.M42;
+                                        miloBoneTransform.transform.m43 = gltfMatrix.M43;
+
+                                        boneTransList.Add(miloBoneTransform);
+                                    }
+                                    mesh.boneTransforms = boneTransList;
+
+
                                 }
-                                mesh.boneTransforms = boneTransList;
+                                else
+                                {
+                                    Console.WriteLine($"Warning: Skinned mesh node '{node.Name}' is linked to skin '{skin.Name ?? "Unnamed"}' which is missing the Inverse Bind Matrices accessor.");
+                                }
+                            }
+                            */
 
-
+                            if (primitiveIndex == 0)
+                            {
+                                DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name, mesh);
+                                meta.entries.Add(entry);
                             }
                             else
                             {
-                                Console.WriteLine($"Warning: Skinned mesh node '{node.Name}' is linked to skin '{skin.Name ?? "Unnamed"}' which is missing the Inverse Bind Matrices accessor.");
+                                DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name + "_" + primitiveIndex, mesh);
+                                meta.entries.Add(entry);
                             }
+
+                            primitiveIndex++;
                         }
-                        */
-
-
                     }
-
-                    DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name, mesh);
-                    meta.entries.Add(entry);
+                    else
+                    {
+                        Console.WriteLine($"{node.Name} has no mesh but is a mesh node. Can not convert glTF.");
+                    }
                 }
                 else if (IsBone(node, model))
                 {
                     RndTrans trans = RndTrans.New(9, 0);
-
-                    var localMatrix = node.LocalMatrix;
-
-                    trans.localXfm.m11 = localMatrix.M11;
-                    trans.localXfm.m12 = localMatrix.M12;
-                    trans.localXfm.m13 = localMatrix.M13;
-
-                    trans.localXfm.m21 = localMatrix.M21;
-                    trans.localXfm.m22 = localMatrix.M22;
-                    trans.localXfm.m23 = localMatrix.M23;
-
-                    trans.localXfm.m31 = localMatrix.M31;
-                    trans.localXfm.m32 = localMatrix.M32;
-                    trans.localXfm.m33 = localMatrix.M33;
-
-                    trans.localXfm.m41 = localMatrix.M41;
-                    trans.localXfm.m42 = localMatrix.M42;
-                    trans.localXfm.m43 = localMatrix.M43;
-
-                    // set up the parent bone if there is one
                     string parentNodeName = GetParentBoneName(node, model);
+
+                    if (parentNodeName != null)
+                    {
+                        var localMatrix = node.LocalMatrix;
+
+                        trans.localXfm.m11 = localMatrix.M11;
+                        trans.localXfm.m12 = localMatrix.M12;
+                        trans.localXfm.m13 = localMatrix.M13;
+
+                        trans.localXfm.m21 = localMatrix.M21;
+                        trans.localXfm.m22 = localMatrix.M22;
+                        trans.localXfm.m23 = localMatrix.M23;
+
+                        trans.localXfm.m31 = localMatrix.M31;
+                        trans.localXfm.m32 = localMatrix.M32;
+                        trans.localXfm.m33 = localMatrix.M33;
+
+                        trans.localXfm.m41 = localMatrix.M41;
+                        trans.localXfm.m42 = localMatrix.M42;
+                        trans.localXfm.m43 = localMatrix.M43;
+
+                        trans.parentObj = parentNodeName;
+                    }
+                    else
+                    {
+                        var worldMatrix = node.WorldMatrix;
+
+                        trans.worldXfm.m11 = worldMatrix.M11;
+                        trans.worldXfm.m12 = worldMatrix.M12;
+                        trans.worldXfm.m13 = worldMatrix.M13;
+
+                        trans.worldXfm.m21 = worldMatrix.M21;
+                        trans.worldXfm.m22 = worldMatrix.M22;
+                        trans.worldXfm.m23 = worldMatrix.M23;
+
+                        trans.worldXfm.m31 = worldMatrix.M31;
+                        trans.worldXfm.m32 = worldMatrix.M32;
+                        trans.worldXfm.m33 = worldMatrix.M33;
+
+                        trans.worldXfm.m41 = worldMatrix.M41;
+                        trans.worldXfm.m42 = worldMatrix.M42;
+                        trans.worldXfm.m43 = worldMatrix.M43;
+                    }
+
                     if (parentNodeName != null)
                     {
                         trans.parentObj = parentNodeName;
@@ -471,7 +531,48 @@ namespace glTFMilo.Source
                     DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Group", node.Name, grp);
                     meta.entries.Add(entry);
                 }
+                else
+                {
+                    // check if it is one of the BandConfiguration nodes (which is named player_bass0, player_guitar0, player_drum0, player_vocals0, player_keyboard0)
+                    if (node.Name == "player_bass0" || node.Name == "player_guitar0" || node.Name == "player_drum0" || node.Name == "player_vocals0" || node.Name == "player_keyboard0")
+                    {
+                        // add the position to the bandConfigurationPositions list
+                        bandConfigurationPositions.Add((node.Name, node.LocalMatrix));
+                    }
+
+                }
             }
+
+            /*
+            // TODO: finish this
+            if (bandConfigurationPositions.Count != 0)
+            {
+                // create a band configuration object
+                BandConfiguration bandConfig = new BandConfiguration();
+                bandConfig.objFields.revision = 2;
+                foreach (var pos in bandConfigurationPositions)
+                {
+                    var trans = new BandConfiguration.TargTransform();
+                    trans.target = pos.Item1;
+                    trans.xfm.m11 = pos.Item2.M11;
+                    trans.xfm.m12 = pos.Item2.M12;
+                    trans.xfm.m13 = pos.Item2.M13;
+                    trans.xfm.m21 = pos.Item2.M21;
+                    trans.xfm.m22 = pos.Item2.M22;
+                    trans.xfm.m23 = pos.Item2.M23;
+                    trans.xfm.m31 = pos.Item2.M31;
+                    trans.xfm.m32 = pos.Item2.M32;
+                    trans.xfm.m33 = pos.Item2.M33;
+                    trans.xfm.m41 = pos.Item2.M41;
+                    trans.xfm.m42 = pos.Item2.M42;
+                    trans.xfm.m43 = pos.Item2.M43;
+                    bandConfig.transforms.Add(trans);
+                }
+                // add the band configuration to the meta
+                DirectoryMeta.Entry entry = new DirectoryMeta.Entry("BandConfiguration", filename, bandConfig);
+                meta.entries.Add(entry);
+            }
+            */
 
             int curmat = 0;
 
@@ -496,12 +597,17 @@ namespace glTFMilo.Source
                     mat.zMode = RndMat.ZMode.kZModeNormal;
                     mat.perPixelLit = true;
                     mat.preLit = false;
+                    mat.pointLights = true;
+                    mat.projLights = true;
+                    mat.fog = true;
+                    mat.cull = true;
+                    mat.shaderVariation = RndMat.ShaderVariation.kShaderVariationHair;
                     mat.blend = RndMat.Blend.kBlendSrc;
                     mat.texWrap = RndMat.TexWrap.kTexWrapClamp;
-                    mat.emissiveMultiplier = 1.0f;
+                    mat.emissiveMultiplier = 0.0f;
                     mat.specularPower = 0.0f;
                     mat.normalDetailTiling = 1.0f;
-                    mat.rimPower = 1.0f;
+                    mat.rimPower = 0.0f;
                     mat.specular2Power = 0.0f;
                     mat.cull = true;
                     using (var str = baseColorTexture.PrimaryImage.Content.Open())
@@ -544,9 +650,10 @@ namespace glTFMilo.Source
 
                     DirectoryMeta.Entry texEntry = new DirectoryMeta.Entry("Tex", material.Name + ".tex", tex);
                     meta.entries.Add(texEntry);
+
+                    mat.objFields.revision = 2;
                 }
-                /*
-                // todo: restore this so normals can be imported
+
                 var normalMapTexture = material.FindChannel("Normal")?.Texture;
                 if (normalMapTexture != null)
                 {
@@ -587,8 +694,7 @@ namespace glTFMilo.Source
 
                     DirectoryMeta.Entry texEntry = new DirectoryMeta.Entry("Tex", material.Name + "_normal.tex", tex);
                     meta.entries.Add(texEntry);
-            }
-                */
+                }
 
             }
 
