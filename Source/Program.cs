@@ -42,26 +42,25 @@ namespace glTFMilo.Source
                 compressor.Input.SetData(image);
                 compressor.Compression.Format = CompressionFormat.BC1;
 
-                bool success = compressor.Process(out DDSContainer ddsContainer);
-                if (!success || ddsContainer == null)
-                {
-                    throw new InvalidOperationException("DDS compression failed even with valid dimensions.");
-                }
 
-
-                using (var stream = System.IO.File.Open(outputPath, FileMode.Create, FileAccess.Write))
+                var stream = System.IO.File.Open(outputPath, FileMode.Create, FileAccess.Write);
+                try
                 {
-                    try
+
+                    bool success = compressor.Process(stream);
+                    if (!success)
                     {
-                        ddsContainer.Write(stream);
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine($"Error writing DDS file: {e.Message}");
-                        return false;
+                        throw new InvalidOperationException("DDS compression failed.");
                     }
                 }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Error writing DDS file: {e.Message}");
+                    return false;
+                }
 
+                // close stream
+                stream.Close();
                 return true;
             }
         }
