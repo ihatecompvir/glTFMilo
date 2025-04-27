@@ -537,6 +537,8 @@ namespace glTFMilo.Source
                 {
                     Console.WriteLine("Node is Light Node, create RndLight");
                     RndLight light = new RndLight();
+
+                    // todo: remove this reflection stuff eventually
                     typeof(RndLight)
                         .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
                         .SetValue(light, (ushort)GameRevisions.GetRevision(selectedGame).LightRevision);
@@ -559,6 +561,22 @@ namespace glTFMilo.Source
                             light.type = RndLight.Type.kPoint;
                             break;
                     }
+
+                    // set light transform
+                    light.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
+
+                    light.trans.localXfm.m11 = node.LocalMatrix.M11;
+                    light.trans.localXfm.m12 = node.LocalMatrix.M12;
+                    light.trans.localXfm.m13 = node.LocalMatrix.M13;
+                    light.trans.localXfm.m21 = node.LocalMatrix.M21;
+                    light.trans.localXfm.m22 = node.LocalMatrix.M22;
+                    light.trans.localXfm.m23 = node.LocalMatrix.M23;
+                    light.trans.localXfm.m31 = node.LocalMatrix.M31;
+                    light.trans.localXfm.m32 = node.LocalMatrix.M32;
+                    light.trans.localXfm.m33 = node.LocalMatrix.M33;
+                    light.trans.localXfm.m41 = node.LocalMatrix.M41;
+                    light.trans.localXfm.m42 = node.LocalMatrix.M42;
+                    light.trans.localXfm.m43 = node.LocalMatrix.M43;
 
                     DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Light", node.Name + ".lit", light);
                     meta.entries.Add(entry);
