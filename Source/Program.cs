@@ -260,6 +260,11 @@ namespace glTFMilo.Source
                             mesh.draw.sphere = new MiloLib.Classes.Sphere();
                             mesh.draw.sphere.radius = 10000.0f;
 
+                            mesh.volume = RndMesh.Volume.kVolumeTriangles;
+
+                            mesh.keepMeshData = true;
+                            mesh.hasAOCalculation = true;
+
                             var localMatrix = node.LocalMatrix;
                             mesh.trans.localXfm.m11 = localMatrix.M11;
                             mesh.trans.localXfm.m12 = localMatrix.M12;
@@ -312,10 +317,11 @@ namespace glTFMilo.Source
 
                                     if (normals != null && originalIndex < normals.Count)
                                     {
+                                        // VERTEX.NORMALS.X/Y/Z ARE WRONG!!! USE NORMALS.NX/NY/NZ
                                         var normal = normals[(int)originalIndex];
-                                        newVert.normals.x = normal.X;
-                                        newVert.normals.y = normal.Y;
-                                        newVert.normals.z = normal.Z;
+                                        newVert.nx = normal.X;
+                                        newVert.ny = normal.Y;
+                                        newVert.nz = normal.Z;
                                     }
 
                                     if (tangents != null && originalIndex < tangents.Count)
