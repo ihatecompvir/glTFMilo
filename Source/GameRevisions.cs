@@ -32,7 +32,8 @@ namespace glTFMilo.Source
                 anim: 4,
                 group: 0xE,
                 charTest: 15,
-                milo: 28
+                milo: 28,
+                light: 0x10
             ),
             new GameRevisions(
                 Game.TheBeatlesRockBand,
@@ -48,7 +49,8 @@ namespace glTFMilo.Source
                 anim: 4,
                 group: 14,
                 charTest: 10,
-                milo: 25
+                milo: 25,
+                light: 0xD
             ),
             new GameRevisions(
                 Game.RockBand2,
@@ -64,7 +66,8 @@ namespace glTFMilo.Source
                 anim: 4,
                 group: 13,
                 charTest: 8,
-                milo: 25
+                milo: 25,
+                light: 0xC
             )
         };
 
@@ -87,6 +90,7 @@ namespace glTFMilo.Source
         public ushort GroupRevision;
         public ushort CharacterTestingRevision;
         public ushort MiloRevision;
+        public ushort LightRevision;
 
         public GameRevisions(
             Game game,
@@ -102,7 +106,8 @@ namespace glTFMilo.Source
             ushort anim,
             ushort group,
             ushort charTest,
-            ushort milo)
+            ushort milo,
+            ushort light)
         {
             Game = game;
             RndDirRevision = rndDir;
@@ -118,6 +123,7 @@ namespace glTFMilo.Source
             GroupRevision = group;
             CharacterTestingRevision = charTest;
             MiloRevision = milo;
+            LightRevision = light;
         }
     }
 

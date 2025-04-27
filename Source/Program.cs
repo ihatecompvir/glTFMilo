@@ -142,6 +142,12 @@ namespace glTFMilo.Source
             return !hasMesh && !isBone && hasChildren;
         }
 
+        static bool IsLightNode(Node node, ModelRoot model)
+        {
+            if (node == null) return false;
+            return node.PunctualLight != null;
+        }
+
         static string GetParentBoneName(Node node, ModelRoot model)
         {
             var parent = GetParentNode(node, model);
@@ -272,7 +278,7 @@ namespace glTFMilo.Source
                             {
                                 if (primitive.Material != null)
                                 {
-                                    mesh.mat = primitive.Material.Name;
+                                    mesh.mat = primitive.Material.Name + ".mat";
                                 }
                                 var positions = primitive.GetVertexAccessor("POSITION")?.AsVector3Array();
                                 var normals = primitive.GetVertexAccessor("NORMAL")?.AsVector3Array();
@@ -435,12 +441,12 @@ namespace glTFMilo.Source
 
                             if (primitiveIndex == 0)
                             {
-                                DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name, mesh);
+                                DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name + ".mesh", mesh);
                                 meta.entries.Add(entry);
                             }
                             else
                             {
-                                DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name + "_" + primitiveIndex, mesh);
+                                DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name + "_" + primitiveIndex + ".mesh", mesh);
                                 meta.entries.Add(entry);
                             }
 
@@ -527,6 +533,36 @@ namespace glTFMilo.Source
                     DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Group", node.Name, grp);
                     meta.entries.Add(entry);
                 }
+                else if (IsLightNode(node, model))
+                {
+                    Console.WriteLine("Node is Light Node, create RndLight");
+                    RndLight light = new RndLight();
+                    typeof(RndLight)
+                        .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
+                        .SetValue(light, (ushort)GameRevisions.GetRevision(selectedGame).LightRevision);
+                    light.objFields.revision = 2;
+                    light.range = node.PunctualLight.Range;
+                    light.colorOwner = node.Name + ".lit";
+                    light.color = new MiloLib.Classes.HmxColor4(node.PunctualLight.Color.X, node.PunctualLight.Color.Y, node.PunctualLight.Color.Z, 1.0f);
+                    switch (node.PunctualLight.LightType)
+                    {
+                        case PunctualLightType.Point:
+                            light.type = RndLight.Type.kPoint;
+                            break;
+                        case PunctualLightType.Spot:
+                            light.type = RndLight.Type.kSpot;
+                            break;
+                        case PunctualLightType.Directional:
+                            light.type = RndLight.Type.kDirectional;
+                            break;
+                        default:
+                            light.type = RndLight.Type.kPoint;
+                            break;
+                    }
+
+                    DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Light", node.Name + ".lit", light);
+                    meta.entries.Add(entry);
+                }
                 else
                 {
                     // check if it is one of the BandConfiguration nodes (which is named player_bass0, player_guitar0, player_drum0, player_vocals0, player_keyboard0)
@@ -577,7 +613,7 @@ namespace glTFMilo.Source
             {
                 RndMat mat = RndMat.New(GameRevisions.GetRevision(selectedGame).MatRevision, 0);
 
-                DirectoryMeta.Entry matEntry = new DirectoryMeta.Entry("Mat", material.Name, mat);
+                DirectoryMeta.Entry matEntry = new DirectoryMeta.Entry("Mat", material.Name + ".mat", mat);
 
                 meta.entries.Add(matEntry);
 
