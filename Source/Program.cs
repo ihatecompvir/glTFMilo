@@ -35,6 +35,19 @@ namespace glTFMilo.Source
             if (image.Width % 4 != 0 || image.Height % 4 != 0)
                 throw new InvalidOperationException($"BC1 compression requires image dimensions to be multiples of 4. Current dimensions: {image.Width}x{image.Height}");
 
+            // check if either dimension is larger than 2048 x 2048 (which seems to be the limit to textures in Milo)
+            if (image.Width > 2048 || image.Height > 2048)
+            {
+                float scale = Math.Min(2048f / image.Width, 2048f / image.Height);
+                int newWidth = (int)(image.Width * scale);
+                int newHeight = (int)(image.Height * scale);
+                bool succeeded = image.Resize(newWidth, newHeight, ImageFilter.Lanczos3);
+                if (!succeeded)
+                {
+                    throw new InvalidOperationException($"Failed to resize image to {newWidth}x{newHeight}.");
+                }
+            }
+
             image.FlipVertically();
 
             using (Compressor compressor = new Compressor())
@@ -263,7 +276,7 @@ namespace glTFMilo.Source
                             mesh.volume = RndMesh.Volume.kVolumeTriangles;
 
                             mesh.keepMeshData = true;
-                            mesh.hasAOCalculation = true;
+                            mesh.hasAOCalculation = false;
 
                             var localMatrix = node.LocalMatrix;
                             mesh.trans.localXfm.m11 = localMatrix.M11;
@@ -664,11 +677,17 @@ namespace glTFMilo.Source
                     mat.cull = true;
                     mat.shaderVariation = RndMat.ShaderVariation.kShaderVariationNone;
                     mat.blend = RndMat.Blend.kBlendSrc;
-                    mat.emissiveMultiplier = 0.0f;
+                    mat.emissiveMultiplier = 1.0f;
                     mat.specularPower = 0.0f;
                     mat.normalDetailTiling = 1.0f;
                     mat.rimPower = 0.0f;
                     mat.specular2Power = 0.0f;
+                    mat.rimRGB = new MiloLib.Classes.HmxColor3(0.0f, 0.0f, 0.0f, 0.0f);
+                    mat.rimPower = 4.0f;
+                    mat.specularPower = 10.0f;
+                    mat.specular2Power = 10.0f;
+
+
 
                     // try to get texture wrap settings
                     if (sampler != null)
@@ -782,6 +801,27 @@ namespace glTFMilo.Source
                 }
 
             }
+
+            // create a new Group with all the geometry inside of it
+            RndGroup allGeomGrp = RndGroup.New(GameRevisions.GetRevision(selectedGame).GroupRevision, 0);
+
+            allGeomGrp.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
+            allGeomGrp.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
+            allGeomGrp.draw.sphere = new MiloLib.Classes.Sphere();
+            allGeomGrp.draw.sphere.radius = 10000.0f;
+
+            foreach (var entry in meta.entries)
+            {
+                if (entry.type == "Mesh")
+                {
+                    allGeomGrp.objects.Add(entry.name);
+                }
+            }
+
+            DirectoryMeta.Entry grpEntry = new DirectoryMeta.Entry("Group", filename + "_geom.grp", allGeomGrp);
+            meta.entries.Add(grpEntry);
+
+
 
             Character character = Character.New(GameRevisions.GetRevision(selectedGame).CharacterRevision, 0);
             character.viewports = new();
