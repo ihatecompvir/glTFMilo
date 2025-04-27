@@ -11,6 +11,7 @@ using TeximpNet.Compression;
 using TeximpNet.DDS;
 using System.Numerics;
 using MiloLib.Assets.Band;
+using CommandLine;
 
 namespace glTFMilo.Source
 {
@@ -164,13 +165,18 @@ namespace glTFMilo.Source
 
         static void Main(string[] args)
         {
-            if (args.Length == 0)
-            {
-                Console.WriteLine("glTFMilo - glTF to Milo converter");
-                Console.WriteLine("Usage: glTFMilo <input.gltf/glb> <output.milo> <platform (xbox/ps3)>");
-                return;
-            }
-            string filePath = args[0];
+            Parser.Default.ParseArguments<Options>(args)
+                .WithParsed(Run);
+        }
+
+
+        static void Run(Options opts)
+        {
+            string filePath = opts.Input;
+            string outputPath = opts.Output;
+            string platform = opts.Platform.ToLower();
+            string gameArg = opts.Game.ToLower();
+            string preLit = opts.Prelit.ToLower();
 
             if (!System.IO.File.Exists(filePath))
             {
@@ -185,29 +191,21 @@ namespace glTFMilo.Source
             }
 
             Game selectedGame = Game.RockBand3;
-            if (args.Length > 3)
+            if (gameArg == "tbrb")
             {
-                string gameArg = args[3].ToLower();
-                if (gameArg == "tbrb")
-                {
-                    selectedGame = Game.TheBeatlesRockBand;
-                }
-                else if (gameArg == "rb3")
-                {
-                    selectedGame = Game.RockBand3;
-                }
-                else if (gameArg == "rb2")
-                {
-                    selectedGame = Game.RockBand2;
-                }
-                else
-                {
-                    Console.WriteLine("Invalid game specified. Defaulting to Rock Band 3.");
-                }
+                selectedGame = Game.TheBeatlesRockBand;
+            }
+            else if (gameArg == "rb3")
+            {
+                selectedGame = Game.RockBand3;
+            }
+            else if (gameArg == "rb2")
+            {
+                selectedGame = Game.RockBand2;
             }
             else
             {
-                Console.WriteLine("No game specified. Defaulting to Rock Band 3.");
+                Console.WriteLine("Invalid game specified. Defaulting to Rock Band 3.");
             }
 
             var model = ModelRoot.Load(filePath);
@@ -218,7 +216,6 @@ namespace glTFMilo.Source
             meta.name = filename;
 
             // check if second arg is "ps3" or "xbox" to set platform
-            string platform = args[2];
             if (platform == "xbox")
             {
                 meta.platform = DirectoryMeta.Platform.Xbox;
@@ -595,20 +592,22 @@ namespace glTFMilo.Source
                     mat.stencilMode = RndMat.StencilMode.kStencilIgnore;
                     mat.zMode = RndMat.ZMode.kZModeNormal;
                     mat.perPixelLit = true;
-                    mat.preLit = false;
+                    if (opts.Prelit != "false")
+                    {
+                        mat.preLit = true;
+                    }
                     mat.pointLights = true;
                     mat.projLights = true;
-                    mat.fog = true;
+                    mat.fog = false;
                     mat.cull = true;
-                    mat.shaderVariation = RndMat.ShaderVariation.kShaderVariationHair;
+                    mat.shaderVariation = RndMat.ShaderVariation.kShaderVariationNone;
                     mat.blend = RndMat.Blend.kBlendSrc;
-                    mat.texWrap = RndMat.TexWrap.kTexWrapClamp;
+                    mat.texWrap = RndMat.TexWrap.kTexWrapRepeat;
                     mat.emissiveMultiplier = 0.0f;
                     mat.specularPower = 0.0f;
                     mat.normalDetailTiling = 1.0f;
                     mat.rimPower = 0.0f;
                     mat.specular2Power = 0.0f;
-                    mat.cull = true;
                     using (var str = baseColorTexture.PrimaryImage.Content.Open())
                     {
                         // shit
@@ -743,9 +742,9 @@ namespace glTFMilo.Source
 
             MiloFile miloFile = new MiloFile(meta);
 
-            miloFile.Save(args[1], MiloFile.Type.Uncompressed, 0x810, MiloLib.Utils.Endian.LittleEndian, MiloLib.Utils.Endian.BigEndian);
+            miloFile.Save(opts.Output, MiloFile.Type.Uncompressed, 0x810, MiloLib.Utils.Endian.LittleEndian, MiloLib.Utils.Endian.BigEndian);
 
-            Console.WriteLine("Milo scene created at " + args[1]);
+            Console.WriteLine("Milo scene created at " + opts.Output);
         }
     }
 }
