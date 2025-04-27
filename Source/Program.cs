@@ -585,6 +585,8 @@ namespace glTFMilo.Source
                 tex.objFields.revision = 2;
 
                 var baseColorTexture = material.FindChannel("BaseColor")?.Texture;
+                var sampler = baseColorTexture?.Sampler;
+
                 if (baseColorTexture != null)
                 {
                     curmat++;
@@ -602,12 +604,37 @@ namespace glTFMilo.Source
                     mat.cull = true;
                     mat.shaderVariation = RndMat.ShaderVariation.kShaderVariationNone;
                     mat.blend = RndMat.Blend.kBlendSrc;
-                    mat.texWrap = RndMat.TexWrap.kTexWrapRepeat;
                     mat.emissiveMultiplier = 0.0f;
                     mat.specularPower = 0.0f;
                     mat.normalDetailTiling = 1.0f;
                     mat.rimPower = 0.0f;
                     mat.specular2Power = 0.0f;
+
+                    // try to get texture wrap settings
+                    if (sampler != null)
+                    {
+                        var wrapS = sampler.WrapS;
+                        var wrapT = sampler.WrapT;
+
+                        if (wrapS == TextureWrapMode.CLAMP_TO_EDGE || wrapT == TextureWrapMode.CLAMP_TO_EDGE)
+                        {
+                            mat.texWrap = RndMat.TexWrap.kTexWrapClamp;
+                        }
+                        else if (wrapS == TextureWrapMode.MIRRORED_REPEAT || wrapT == TextureWrapMode.MIRRORED_REPEAT)
+                        {
+                            mat.texWrap = RndMat.TexWrap.kTexWrapMirror;
+                        }
+                        else
+                        {
+                            mat.texWrap = RndMat.TexWrap.kTexWrapRepeat;
+                        }
+                    }
+                    else
+                    {
+                        // No sampler, just use tiling
+                        mat.texWrap = RndMat.TexWrap.kTexWrapRepeat;
+                    }
+
                     using (var str = baseColorTexture.PrimaryImage.Content.Open())
                     {
                         // shit
