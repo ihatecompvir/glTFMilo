@@ -731,6 +731,9 @@ namespace glTFMilo.Source
                         tex.width = (uint)width;
                         tex.height = (uint)height;
                         tex.bpp = (uint)bpp;
+                        tex.externalPath = material.Name + ".png";
+                        tex.mipMapK = -8.0f;
+                        tex.type = RndTex.Type.kRegular;
 
                         tex.bitmap = RndBitmap.New(1, 0);
                         tex.bitmap.height = (ushort)tex.height;
@@ -755,6 +758,8 @@ namespace glTFMilo.Source
                         else
                         {
                             tex.bitmap.textures.Add(pixels.ToList());
+
+                            tex.optimizeForPS3 = true;
                         }
                     }
 
@@ -782,6 +787,8 @@ namespace glTFMilo.Source
                         normalTex.height = (uint)height;
                         normalTex.bpp = (uint)bpp;
                         normalTex.externalPath = material.Name + "_norm.png";
+                        normalTex.mipMapK = -8.0f;
+                        normalTex.type = RndTex.Type.kRegular;
 
                         normalTex.bitmap = RndBitmap.New(1, 0);
                         normalTex.bitmap.height = (ushort)normalTex.height;
@@ -806,6 +813,8 @@ namespace glTFMilo.Source
                         else
                         {
                             normalTex.bitmap.textures.Add(pixels.ToList());
+
+                            normalTex.optimizeForPS3 = true;
                         }
                     }
 
