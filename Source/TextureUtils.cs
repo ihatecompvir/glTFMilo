@@ -11,7 +11,7 @@ namespace glTFMilo.Source
     public class TextureUtils
     {
         // TODO: put these into their own class or something instead of randomyly at the top of this
-        public static bool ConvertToDDS(Stream inputStream, string outputPath, CompressionFormat format)
+        public static bool ConvertToDDS(Stream inputStream, string outputPath, CompressionFormat format, bool ignoreLimits = false)
         {
             if (inputStream.CanSeek)
                 inputStream.Position = 0;
@@ -24,15 +24,19 @@ namespace glTFMilo.Source
                 throw new InvalidOperationException($"BC1 compression requires image dimensions to be multiples of 4. Current dimensions: {image.Width}x{image.Height}");
 
             // check if either dimension is larger than 2048 x 2048 (which seems to be the limit to textures in Milo)
-            if (image.Width > 2048 || image.Height > 2048)
+            if (image.Width > 512 || image.Height > 512)
             {
-                float scale = Math.Min(2048f / image.Width, 2048f / image.Height);
-                int newWidth = (int)(image.Width * scale);
-                int newHeight = (int)(image.Height * scale);
-                bool succeeded = image.Resize(newWidth, newHeight, ImageFilter.Lanczos3);
-                if (!succeeded)
+                // if ignoreLimits is true, we can ignore this and just allow the texture to be larger
+                if (!ignoreLimits)
                 {
-                    throw new InvalidOperationException($"Failed to resize image to {newWidth}x{newHeight}.");
+                    float scale = Math.Min(512f / image.Width, 512f / image.Height);
+                    int newWidth = (int)(image.Width * scale);
+                    int newHeight = (int)(image.Height * scale);
+                    bool succeeded = image.Resize(newWidth, newHeight, ImageFilter.Lanczos3);
+                    if (!succeeded)
+                    {
+                        throw new InvalidOperationException($"Failed to resize image to {newWidth}x{newHeight}.");
+                    }
                 }
             }
 

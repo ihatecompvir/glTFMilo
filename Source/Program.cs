@@ -27,6 +27,7 @@ namespace glTFMilo.Source
             string platform = opts.Platform.ToLower();
             string gameArg = opts.Game.ToLower();
             string preLit = opts.Prelit.ToLower();
+            bool ignoreLimits = opts.IgnoreTexSizeLimits;
 
             if (!System.IO.File.Exists(filePath))
             {
@@ -280,13 +281,16 @@ namespace glTFMilo.Source
                             if (primitiveIndex == 0)
                             {
                                 DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name + ".mesh", mesh);
+                                mesh.geomOwner = entry.name;
                                 meta.entries.Add(entry);
                             }
                             else
                             {
                                 DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name + "_" + primitiveIndex + ".mesh", mesh);
+                                mesh.geomOwner = entry.name;
                                 meta.entries.Add(entry);
                             }
+
 
                             primitiveIndex++;
                         }
@@ -498,7 +502,7 @@ namespace glTFMilo.Source
                         bool hasAlpha = tempImage.IsTransparent;
                         str.Position = 0;
                         CompressionFormat format = hasAlpha ? CompressionFormat.BC3 : CompressionFormat.BC1;
-                        TextureUtils.ConvertToDDS(str, $"output_{curmat}.dds", format);
+                        TextureUtils.ConvertToDDS(str, $"output_{curmat}.dds", format, ignoreLimits);
 
                         var (width, height, bpp, mipMapCount, pixels) = TextureUtils.ParseDDS($"output_{curmat}.dds");
                         tex.width = (uint)width;
@@ -554,7 +558,7 @@ namespace glTFMilo.Source
                 {
                     using (var str = normalMapTexture.PrimaryImage.Content.Open())
                     {
-                        TextureUtils.ConvertToDDS(str, $"output_{curmat}_norm.dds", CompressionFormat.BC5);
+                        TextureUtils.ConvertToDDS(str, $"output_{curmat}_norm.dds", CompressionFormat.BC5, ignoreLimits);
                         var (width, height, bpp, mipMapCount, pixels) = TextureUtils.ParseDDS($"output_{curmat}_norm.dds");
                         normalTex.width = (uint)width;
                         normalTex.height = (uint)height;

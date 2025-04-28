@@ -23,5 +23,8 @@ namespace glTFMilo.Source
 
         [Option("prelit", Required = false, HelpText = "Whether or not Materials should be pre-lit.")]
         public string Prelit { get; set; } = string.Empty;
+
+        [Option("ignore_tex_size_limits", Required = false, HelpText = "Allows arbitrary texture sizes rather than resizing to the max of 512 x 512. Larger textures can sometimes work, but your mileage may greatly vary by going beyond the safe maximum.")]
+        public bool IgnoreTexSizeLimits { get; set; } = false;
     }
 }
