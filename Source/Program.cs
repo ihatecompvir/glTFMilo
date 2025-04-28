@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Reflection;
+﻿using System.Reflection;
 using MiloLib;
 using MiloLib.Assets;
 using MiloLib.Assets.Char;
@@ -8,181 +6,13 @@ using MiloLib.Assets.Rnd;
 using SharpGLTF.Schema2;
 using TeximpNet;
 using TeximpNet.Compression;
-using TeximpNet.DDS;
 using System.Numerics;
-using MiloLib.Assets.Band;
 using CommandLine;
 
 namespace glTFMilo.Source
 {
-
-
     internal class Program
     {
-
-        // TODO: put these into their own class or something instead of randomyly at the top of this
-        public static bool ConvertToDDS(Stream inputStream, string outputPath, CompressionFormat format)
-        {
-            // Delete the existing file at outputPath if one exists
-            File.Delete(outputPath);
-            if (inputStream.CanSeek)
-                inputStream.Position = 0;
-
-            Surface image = Surface.LoadFromStream(inputStream);
-            if (image == null)
-                throw new InvalidOperationException("Failed to load input image from stream.");
-
-            if (image.Width % 4 != 0 || image.Height % 4 != 0)
-                throw new InvalidOperationException($"BC1 compression requires image dimensions to be multiples of 4. Current dimensions: {image.Width}x{image.Height}");
-
-            // check if either dimension is larger than 2048 x 2048 (which seems to be the limit to textures in Milo)
-            if (image.Width > 2048 || image.Height > 2048)
-            {
-                float scale = Math.Min(2048f / image.Width, 2048f / image.Height);
-                int newWidth = (int)(image.Width * scale);
-                int newHeight = (int)(image.Height * scale);
-                bool succeeded = image.Resize(newWidth, newHeight, ImageFilter.Lanczos3);
-                if (!succeeded)
-                {
-                    throw new InvalidOperationException($"Failed to resize image to {newWidth}x{newHeight}.");
-                }
-            }
-
-            image.FlipVertically();
-
-            using (Compressor compressor = new Compressor())
-            {
-                compressor.Input.GenerateMipmaps = false;
-                compressor.Input.SetData(image);
-                compressor.Compression.Format = format;
-
-
-                var stream = System.IO.File.Open(outputPath, FileMode.Create, FileAccess.Write);
-                try
-                {
-
-                    bool success = compressor.Process(stream);
-                    if (!success)
-                    {
-                        throw new InvalidOperationException("DDS compression failed.");
-                    }
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine($"Error writing DDS file: {e.Message}");
-                    return false;
-                }
-
-                // close stream
-                stream.Close();
-                return true;
-            }
-        }
-
-        // crappy way to parse a DDS file
-        // TODO: create a proper class
-        public static (int width, int height, int bpp, int mipMapCount, byte[] pixelData) ParseDDS(string ddsFilePath)
-        {
-            byte[] fileBytes = File.ReadAllBytes(ddsFilePath);
-            if (fileBytes.Length <= 128)
-            {
-                Console.WriteLine("Invalid DDS file.");
-                return (0, 0, 0, 0, new byte[0]);
-            }
-
-            using (var ms = new MemoryStream(fileBytes))
-            using (var br = new BinaryReader(ms))
-            {
-                // Check magic number "DDS " to see if we are really dealing with a dds
-                if (br.ReadUInt32() != 0x20534444)
-                    throw new InvalidOperationException("Not a valid DDS file.");
-
-                br.BaseStream.Seek(8, SeekOrigin.Current);
-                int height = br.ReadInt32();
-                int width = br.ReadInt32();
-                br.BaseStream.Seek(8, SeekOrigin.Current);
-                int mipMapCount = br.ReadInt32();
-                br.BaseStream.Seek(44, SeekOrigin.Current);
-                br.BaseStream.Seek(4, SeekOrigin.Current);
-                uint pfFlags = br.ReadUInt32();
-                uint fourCC = br.ReadUInt32();
-
-                int bpp = fourCC switch
-                {
-                    0x31545844 => 4, // 'DXT1' = BC1 = 4 bpp
-                    0x33545844 => 8, // 'DXT3' = BC2 = 8 bpp
-                    0x35545844 => 8, // 'DXT5' = BC3 = 8 bpp
-                    0x32495441 => 8, // 'ATI2' = BC5 = 8 bpp
-                    _ => throw new NotSupportedException($"Unsupported format FourCC: 0x{fourCC:X}")
-                };
-
-                byte[] pixelData = new byte[fileBytes.Length - 128];
-                Array.Copy(fileBytes, 128, pixelData, 0, pixelData.Length);
-
-                return (width, height, bpp, mipMapCount, pixelData);
-            }
-        }
-
-        static bool IsBone(Node node, ModelRoot model)
-        {
-            // If this node is referenced by any Skin as a joint, it's a bone (should be anyway lol)
-            return model.LogicalSkins.Any(skin => skin.Joints.Contains(node));
-        }
-
-        static bool IsPrimitive(Node node)
-        {
-            // If this node has a mesh, it is a mesh/primitive node
-            return node.Mesh != null;
-        }
-
-        static Node GetParentNode(Node targetNode, ModelRoot model)
-        {
-            foreach (var node in model.LogicalNodes)
-            {
-                if (node.VisualChildren.Contains(targetNode))
-                {
-                    return node;
-                }
-            }
-            return null; // probably root, or not found
-        }
-
-        static bool IsGroupNode(Node node, ModelRoot model)
-        {
-            bool hasMesh = node.Mesh != null;
-            bool isBone = model.LogicalSkins.Any(skin => skin.Joints.Contains(node));
-            bool hasChildren = node.VisualChildren.Count() > 0;
-
-            return !hasMesh && !isBone && hasChildren;
-        }
-
-        static bool IsLightNode(Node node, ModelRoot model)
-        {
-            if (node == null) return false;
-            return node.PunctualLight != null;
-        }
-
-        static string GetParentBoneName(Node node, ModelRoot model)
-        {
-            var parent = GetParentNode(node, model);
-            if (parent != null && model.LogicalSkins.Any(skin => skin.Joints.Contains(parent)))
-            {
-                return parent.Name;
-            }
-            return null;
-        }
-
-        static List<string> GetAllDescendantNames(Node node)
-        {
-            List<string> names = new List<string>();
-            foreach (var child in node.VisualChildren)
-            {
-                names.Add(child.Name);
-                names.AddRange(GetAllDescendantNames(child)); // recurse
-            }
-            return names;
-        }
-
         static void Main(string[] args)
         {
             Parser.Default.ParseArguments<Options>(args)
@@ -259,7 +89,7 @@ namespace glTFMilo.Source
             // TODO: add lights, possibly other kinds
             foreach (var node in model.LogicalNodes)
             {
-                if (IsPrimitive(node))
+                if (NodeHelpers.IsPrimitive(node))
                 {
                     if (node.Mesh != null)
                     {
@@ -279,19 +109,8 @@ namespace glTFMilo.Source
                             mesh.keepMeshData = true;
                             mesh.hasAOCalculation = false;
 
-                            var localMatrix = node.LocalMatrix;
-                            mesh.trans.localXfm.m11 = localMatrix.M11;
-                            mesh.trans.localXfm.m12 = localMatrix.M12;
-                            mesh.trans.localXfm.m13 = localMatrix.M13;
-                            mesh.trans.localXfm.m21 = localMatrix.M21;
-                            mesh.trans.localXfm.m22 = localMatrix.M22;
-                            mesh.trans.localXfm.m23 = localMatrix.M23;
-                            mesh.trans.localXfm.m31 = localMatrix.M31;
-                            mesh.trans.localXfm.m32 = localMatrix.M32;
-                            mesh.trans.localXfm.m33 = localMatrix.M33;
-                            mesh.trans.localXfm.m41 = localMatrix.M41;
-                            mesh.trans.localXfm.m42 = localMatrix.M42;
-                            mesh.trans.localXfm.m43 = localMatrix.M43;
+                            MatrixHelpers.CopyMatrix(node.LocalMatrix, mesh.trans.localXfm);
+                            MatrixHelpers.CopyMatrix(node.WorldMatrix, mesh.trans.worldXfm);
 
                             if (node.Mesh != null)
                             {
@@ -477,54 +296,14 @@ namespace glTFMilo.Source
                         Console.WriteLine($"{node.Name} has no mesh but is a mesh node. Can not convert glTF.");
                     }
                 }
-                else if (IsBone(node, model))
+                else if (NodeHelpers.IsBone(node, model))
                 {
                     RndTrans trans = RndTrans.New(9, 0);
                     trans.objFields.revision = 2;
-                    string parentNodeName = GetParentBoneName(node, model);
+                    string parentNodeName = NodeHelpers.GetParentBoneName(node, model);
 
-                    if (parentNodeName != null)
-                    {
-                        var localMatrix = node.LocalMatrix;
-
-                        trans.localXfm.m11 = localMatrix.M11;
-                        trans.localXfm.m12 = localMatrix.M12;
-                        trans.localXfm.m13 = localMatrix.M13;
-
-                        trans.localXfm.m21 = localMatrix.M21;
-                        trans.localXfm.m22 = localMatrix.M22;
-                        trans.localXfm.m23 = localMatrix.M23;
-
-                        trans.localXfm.m31 = localMatrix.M31;
-                        trans.localXfm.m32 = localMatrix.M32;
-                        trans.localXfm.m33 = localMatrix.M33;
-
-                        trans.localXfm.m41 = localMatrix.M41;
-                        trans.localXfm.m42 = localMatrix.M42;
-                        trans.localXfm.m43 = localMatrix.M43;
-
-                        trans.parentObj = parentNodeName;
-                    }
-                    else
-                    {
-                        var worldMatrix = node.WorldMatrix;
-
-                        trans.worldXfm.m11 = worldMatrix.M11;
-                        trans.worldXfm.m12 = worldMatrix.M12;
-                        trans.worldXfm.m13 = worldMatrix.M13;
-
-                        trans.worldXfm.m21 = worldMatrix.M21;
-                        trans.worldXfm.m22 = worldMatrix.M22;
-                        trans.worldXfm.m23 = worldMatrix.M23;
-
-                        trans.worldXfm.m31 = worldMatrix.M31;
-                        trans.worldXfm.m32 = worldMatrix.M32;
-                        trans.worldXfm.m33 = worldMatrix.M33;
-
-                        trans.worldXfm.m41 = worldMatrix.M41;
-                        trans.worldXfm.m42 = worldMatrix.M42;
-                        trans.worldXfm.m43 = worldMatrix.M43;
-                    }
+                    MatrixHelpers.CopyMatrix(node.LocalMatrix, trans.localXfm);
+                    MatrixHelpers.CopyMatrix(node.WorldMatrix, trans.worldXfm);
 
                     if (parentNodeName != null)
                     {
@@ -538,14 +317,14 @@ namespace glTFMilo.Source
                     DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Trans", node.Name, trans);
                     meta.entries.Add(entry);
                 }
-                else if (IsGroupNode(node, model))
+                else if (NodeHelpers.IsGroupNode(node, model))
                 {
                     RndGroup grp = RndGroup.New(GameRevisions.GetRevision(selectedGame).GroupRevision, 0);
                     grp.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
                     grp.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
                     grp.objFields.revision = 2;
                     grp.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
-                    List<string> children = GetAllDescendantNames(node);
+                    List<string> children = NodeHelpers.GetAllDescendantNames(node);
                     if (children.Count > 0)
                     {
                         foreach (var child in children)
@@ -559,7 +338,7 @@ namespace glTFMilo.Source
                     DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Group", node.Name + ".grp", grp);
                     meta.entries.Add(entry);
                 }
-                else if (IsLightNode(node, model))
+                else if (NodeHelpers.IsLightNode(node, model))
                 {
                     Console.WriteLine("Node is Light Node, create RndLight");
                     RndLight light = new RndLight();
@@ -591,18 +370,8 @@ namespace glTFMilo.Source
                     // set light transform
                     light.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
 
-                    light.trans.localXfm.m11 = node.WorldMatrix.M11;
-                    light.trans.localXfm.m12 = node.WorldMatrix.M12;
-                    light.trans.localXfm.m13 = node.WorldMatrix.M13;
-                    light.trans.localXfm.m21 = node.WorldMatrix.M21;
-                    light.trans.localXfm.m22 = node.WorldMatrix.M22;
-                    light.trans.localXfm.m23 = node.WorldMatrix.M23;
-                    light.trans.localXfm.m31 = node.WorldMatrix.M31;
-                    light.trans.localXfm.m32 = node.WorldMatrix.M32;
-                    light.trans.localXfm.m33 = node.WorldMatrix.M33;
-                    light.trans.localXfm.m41 = node.WorldMatrix.M41;
-                    light.trans.localXfm.m42 = node.WorldMatrix.M42;
-                    light.trans.localXfm.m43 = node.WorldMatrix.M43;
+                    MatrixHelpers.CopyMatrix(node.LocalMatrix, light.trans.localXfm);
+                    MatrixHelpers.CopyMatrix(node.WorldMatrix, light.trans.worldXfm);
 
                     DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Light", node.Name + ".lit", light);
                     meta.entries.Add(entry);
@@ -729,9 +498,9 @@ namespace glTFMilo.Source
                         bool hasAlpha = tempImage.IsTransparent;
                         str.Position = 0;
                         CompressionFormat format = hasAlpha ? CompressionFormat.BC3 : CompressionFormat.BC1;
-                        ConvertToDDS(str, $"output_{curmat}.dds", format);
+                        TextureUtils.ConvertToDDS(str, $"output_{curmat}.dds", format);
 
-                        var (width, height, bpp, mipMapCount, pixels) = ParseDDS($"output_{curmat}.dds");
+                        var (width, height, bpp, mipMapCount, pixels) = TextureUtils.ParseDDS($"output_{curmat}.dds");
                         tex.width = (uint)width;
                         tex.height = (uint)height;
                         tex.bpp = (uint)bpp;
@@ -785,8 +554,8 @@ namespace glTFMilo.Source
                 {
                     using (var str = normalMapTexture.PrimaryImage.Content.Open())
                     {
-                        ConvertToDDS(str, $"output_{curmat}_norm.dds", CompressionFormat.BC5);
-                        var (width, height, bpp, mipMapCount, pixels) = ParseDDS($"output_{curmat}_norm.dds");
+                        TextureUtils.ConvertToDDS(str, $"output_{curmat}_norm.dds", CompressionFormat.BC5);
+                        var (width, height, bpp, mipMapCount, pixels) = TextureUtils.ParseDDS($"output_{curmat}_norm.dds");
                         normalTex.width = (uint)width;
                         normalTex.height = (uint)height;
                         normalTex.bpp = (uint)bpp;
