@@ -725,8 +725,12 @@ namespace glTFMilo.Source
 
                     using (var str = baseColorTexture.PrimaryImage.Content.Open())
                     {
-                        // shit
-                        ConvertToDDS(str, $"output_{curmat}.dds", CompressionFormat.BC1);
+                        Surface tempImage = Surface.LoadFromStream(str);
+                        bool hasAlpha = tempImage.IsTransparent;
+                        str.Position = 0;
+                        CompressionFormat format = hasAlpha ? CompressionFormat.BC3 : CompressionFormat.BC1;
+                        ConvertToDDS(str, $"output_{curmat}.dds", format);
+
                         var (width, height, bpp, mipMapCount, pixels) = ParseDDS($"output_{curmat}.dds");
                         tex.width = (uint)width;
                         tex.height = (uint)height;
@@ -739,7 +743,7 @@ namespace glTFMilo.Source
                         tex.bitmap.height = (ushort)tex.height;
                         tex.bitmap.width = (ushort)tex.width;
                         tex.bitmap.bpp = (byte)tex.bpp;
-                        tex.bitmap.encoding = RndBitmap.TextureEncoding.DXT1_BC1;
+                        tex.bitmap.encoding = hasAlpha ? RndBitmap.TextureEncoding.DXT5_BC3 : RndBitmap.TextureEncoding.DXT1_BC1;
                         tex.bitmap.mipMaps = 0;
                         tex.bitmap.bpl = (ushort)((width * bpp) / 8);
 
