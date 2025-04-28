@@ -21,7 +21,7 @@ namespace glTFMilo.Source
     {
 
         // TODO: put these into their own class or something instead of randomyly at the top of this
-        public static bool ConvertToDDS(Stream inputStream, string outputPath)
+        public static bool ConvertToDDS(Stream inputStream, string outputPath, CompressionFormat format)
         {
             // Delete the existing file at outputPath if one exists
             File.Delete(outputPath);
@@ -54,7 +54,7 @@ namespace glTFMilo.Source
             {
                 compressor.Input.GenerateMipmaps = false;
                 compressor.Input.SetData(image);
-                compressor.Compression.Format = CompressionFormat.BC1;
+                compressor.Compression.Format = format;
 
 
                 var stream = System.IO.File.Open(outputPath, FileMode.Create, FileAccess.Write);
@@ -112,6 +112,7 @@ namespace glTFMilo.Source
                     0x31545844 => 4, // 'DXT1' = BC1 = 4 bpp
                     0x33545844 => 8, // 'DXT3' = BC2 = 8 bpp
                     0x35545844 => 8, // 'DXT5' = BC3 = 8 bpp
+                    0x32495441 => 8, // 'ATI2' = BC5 = 8 bpp
                     _ => throw new NotSupportedException($"Unsupported format FourCC: 0x{fourCC:X}")
                 };
 
@@ -423,27 +424,25 @@ namespace glTFMilo.Source
                                     var boneTransList = new List<RndMesh.BoneTransform>();
 
 
-                                    for (int i = 0; i < 44; i++)
+                                    for (int i = 0; i < 1; i++)
                                     {
                                         var jointNode = joints[i];
-                                        var gltfMatrix = gltfInverseBindMatrices[i];
-
                                         var miloBoneTransform = new RndMesh.BoneTransform();
 
                                         miloBoneTransform.name = jointNode.Name ?? $"joint_{i}";
 
-                                        miloBoneTransform.transform.m11 = gltfMatrix.M11;
-                                        miloBoneTransform.transform.m12 = gltfMatrix.M12;
-                                        miloBoneTransform.transform.m13 = gltfMatrix.M13;
-                                        miloBoneTransform.transform.m21 = gltfMatrix.M21;
-                                        miloBoneTransform.transform.m22 = gltfMatrix.M22;
-                                        miloBoneTransform.transform.m23 = gltfMatrix.M23;
-                                        miloBoneTransform.transform.m31 = gltfMatrix.M31;
-                                        miloBoneTransform.transform.m32 = gltfMatrix.M32;
-                                        miloBoneTransform.transform.m33 = gltfMatrix.M33;
-                                        miloBoneTransform.transform.m41 = gltfMatrix.M41;
-                                        miloBoneTransform.transform.m42 = gltfMatrix.M42;
-                                        miloBoneTransform.transform.m43 = gltfMatrix.M43;
+                                        miloBoneTransform.transform.m11 = jointNode.LocalMatrix.M11;
+                                        miloBoneTransform.transform.m12 = jointNode.LocalMatrix.M12;
+                                        miloBoneTransform.transform.m13 = jointNode.LocalMatrix.M13;
+                                        miloBoneTransform.transform.m21 = jointNode.LocalMatrix.M21;
+                                        miloBoneTransform.transform.m22 = jointNode.LocalMatrix.M22;
+                                        miloBoneTransform.transform.m23 = jointNode.LocalMatrix.M23;
+                                        miloBoneTransform.transform.m31 = jointNode.LocalMatrix.M31;
+                                        miloBoneTransform.transform.m32 = jointNode.LocalMatrix.M32;
+                                        miloBoneTransform.transform.m33 = jointNode.LocalMatrix.M33;
+                                        miloBoneTransform.transform.m41 = jointNode.LocalMatrix.M41;
+                                        miloBoneTransform.transform.m42 = jointNode.LocalMatrix.M42;
+                                        miloBoneTransform.transform.m43 = jointNode.LocalMatrix.M43;
 
                                         boneTransList.Add(miloBoneTransform);
                                     }
@@ -457,6 +456,7 @@ namespace glTFMilo.Source
                                 }
                             }
                             */
+
 
                             if (primitiveIndex == 0)
                             {
@@ -480,6 +480,7 @@ namespace glTFMilo.Source
                 else if (IsBone(node, model))
                 {
                     RndTrans trans = RndTrans.New(9, 0);
+                    trans.objFields.revision = 2;
                     string parentNodeName = GetParentBoneName(node, model);
 
                     if (parentNodeName != null)
@@ -529,6 +530,10 @@ namespace glTFMilo.Source
                     {
                         trans.parentObj = parentNodeName;
                     }
+                    else
+                    {
+                        trans.parentObj = meta.name;
+                    }
 
                     DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Trans", node.Name, trans);
                     meta.entries.Add(entry);
@@ -538,6 +543,8 @@ namespace glTFMilo.Source
                     RndGroup grp = RndGroup.New(GameRevisions.GetRevision(selectedGame).GroupRevision, 0);
                     grp.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
                     grp.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
+                    grp.objFields.revision = 2;
+                    grp.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
                     List<string> children = GetAllDescendantNames(node);
                     if (children.Count > 0)
                     {
@@ -549,7 +556,7 @@ namespace glTFMilo.Source
                                 grp.objects.Add(child);
                         }
                     }
-                    DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Group", node.Name, grp);
+                    DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Group", node.Name + ".grp", grp);
                     meta.entries.Add(entry);
                 }
                 else if (IsLightNode(node, model))
@@ -584,30 +591,32 @@ namespace glTFMilo.Source
                     // set light transform
                     light.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
 
-                    light.trans.localXfm.m11 = node.LocalMatrix.M11;
-                    light.trans.localXfm.m12 = node.LocalMatrix.M12;
-                    light.trans.localXfm.m13 = node.LocalMatrix.M13;
-                    light.trans.localXfm.m21 = node.LocalMatrix.M21;
-                    light.trans.localXfm.m22 = node.LocalMatrix.M22;
-                    light.trans.localXfm.m23 = node.LocalMatrix.M23;
-                    light.trans.localXfm.m31 = node.LocalMatrix.M31;
-                    light.trans.localXfm.m32 = node.LocalMatrix.M32;
-                    light.trans.localXfm.m33 = node.LocalMatrix.M33;
-                    light.trans.localXfm.m41 = node.LocalMatrix.M41;
-                    light.trans.localXfm.m42 = node.LocalMatrix.M42;
-                    light.trans.localXfm.m43 = node.LocalMatrix.M43;
+                    light.trans.localXfm.m11 = node.WorldMatrix.M11;
+                    light.trans.localXfm.m12 = node.WorldMatrix.M12;
+                    light.trans.localXfm.m13 = node.WorldMatrix.M13;
+                    light.trans.localXfm.m21 = node.WorldMatrix.M21;
+                    light.trans.localXfm.m22 = node.WorldMatrix.M22;
+                    light.trans.localXfm.m23 = node.WorldMatrix.M23;
+                    light.trans.localXfm.m31 = node.WorldMatrix.M31;
+                    light.trans.localXfm.m32 = node.WorldMatrix.M32;
+                    light.trans.localXfm.m33 = node.WorldMatrix.M33;
+                    light.trans.localXfm.m41 = node.WorldMatrix.M41;
+                    light.trans.localXfm.m42 = node.WorldMatrix.M42;
+                    light.trans.localXfm.m43 = node.WorldMatrix.M43;
 
                     DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Light", node.Name + ".lit", light);
                     meta.entries.Add(entry);
                 }
                 else
                 {
+                    /*
                     // check if it is one of the BandConfiguration nodes (which is named player_bass0, player_guitar0, player_drum0, player_vocals0, player_keyboard0)
                     if (node.Name == "player_bass0" || node.Name == "player_guitar0" || node.Name == "player_drum0" || node.Name == "player_vocals0" || node.Name == "player_keyboard0")
                     {
                         // add the position to the bandConfigurationPositions list
                         bandConfigurationPositions.Add((node.Name, node.LocalMatrix));
                     }
+                    */
 
                 }
             }
@@ -717,7 +726,7 @@ namespace glTFMilo.Source
                     using (var str = baseColorTexture.PrimaryImage.Content.Open())
                     {
                         // shit
-                        ConvertToDDS(str, $"output_{curmat}.dds");
+                        ConvertToDDS(str, $"output_{curmat}.dds", CompressionFormat.BC1);
                         var (width, height, bpp, mipMapCount, pixels) = ParseDDS($"output_{curmat}.dds");
                         tex.width = (uint)width;
                         tex.height = (uint)height;
@@ -759,24 +768,28 @@ namespace glTFMilo.Source
                 }
 
                 var normalMapTexture = material.FindChannel("Normal")?.Texture;
+
+                RndTex normalTex = RndTex.New(GameRevisions.GetRevision(selectedGame).TextureRevision, 0);
+                normalTex.objFields.revision = 2;
+
                 if (normalMapTexture != null)
                 {
-                    mat.normalMap = material.Name + "_normal.tex";
                     using (var str = normalMapTexture.PrimaryImage.Content.Open())
                     {
-                        ConvertToDDS(str, "output.dds");
-                        var (width, height, bpp, mipMapCount, pixels) = ParseDDS("output.dds");
-                        tex.width = (uint)width;
-                        tex.height = (uint)height;
-                        tex.bpp = (uint)bpp;
-                        tex.externalPath = material.Name + ".png";
+                        ConvertToDDS(str, $"output_{curmat}_norm.dds", CompressionFormat.BC5);
+                        var (width, height, bpp, mipMapCount, pixels) = ParseDDS($"output_{curmat}_norm.dds");
+                        normalTex.width = (uint)width;
+                        normalTex.height = (uint)height;
+                        normalTex.bpp = (uint)bpp;
+                        normalTex.externalPath = material.Name + "_norm.png";
 
-                        tex.bitmap = RndBitmap.New(1, 0);
-                        tex.bitmap.height = (ushort)tex.height;
-                        tex.bitmap.width = (ushort)tex.width;
-                        tex.bitmap.bpp = (byte)tex.bpp;
-                        tex.bitmap.encoding = RndBitmap.TextureEncoding.DXT1_BC1;
-                        tex.bitmap.mipMaps = 0;
+                        normalTex.bitmap = RndBitmap.New(1, 0);
+                        normalTex.bitmap.height = (ushort)normalTex.height;
+                        normalTex.bitmap.width = (ushort)normalTex.width;
+                        normalTex.bitmap.bpp = (byte)normalTex.bpp;
+                        normalTex.bitmap.encoding = RndBitmap.TextureEncoding.ATI2_BC5;
+                        normalTex.bitmap.mipMaps = 0;
+                        normalTex.bitmap.bpl = (ushort)((width * bpp) / 8);
 
                         if (meta.platform == DirectoryMeta.Platform.Xbox)
                         {
@@ -788,15 +801,19 @@ namespace glTFMilo.Source
                                 swapped.Add(pixels[i + 3]);
                                 swapped.Add(pixels[i + 2]);
                             }
-                            tex.bitmap.textures.Add(swapped);
+                            normalTex.bitmap.textures.Add(swapped);
                         }
                         else
                         {
-                            tex.bitmap.textures.Add(pixels.ToList());
+                            normalTex.bitmap.textures.Add(pixels.ToList());
                         }
                     }
 
-                    DirectoryMeta.Entry texEntry = new DirectoryMeta.Entry("Tex", material.Name + "_normal.tex", tex);
+                    mat.normalMap = material.Name + "_norm.tex";
+
+                    File.Delete($"output_{curmat}_norm.dds");
+
+                    DirectoryMeta.Entry texEntry = new DirectoryMeta.Entry("Tex", material.Name + "_norm.tex", normalTex);
                     meta.entries.Add(texEntry);
                 }
 
@@ -809,6 +826,9 @@ namespace glTFMilo.Source
             allGeomGrp.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
             allGeomGrp.draw.sphere = new MiloLib.Classes.Sphere();
             allGeomGrp.draw.sphere.radius = 10000.0f;
+            allGeomGrp.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
+
+            allGeomGrp.objFields.revision = 2;
 
             foreach (var entry in meta.entries)
             {
