@@ -521,16 +521,6 @@ namespace glTFMilo.Source
                         str.Position = 0;
                         CompressionFormat format = hasAlpha ? CompressionFormat.BC3 : CompressionFormat.BC1;
                         TextureUtils.ConvertToDDS(str, $"output_{curmat}.dds", format, ignoreLimits);
-
-                        // should be right
-                        //if (hasAlpha)
-                        //{
-                        //    mat.zMode = RndMat.ZMode.kZModeTransparent;
-                        //}
-                        //else
-                        //{
-                        //    mat.zMode = RndMat.ZMode.kZModeNormal;
-                        //}
                         mat.zMode = RndMat.ZMode.kZModeNormal;
 
                         // i think this is generally correct?
@@ -606,7 +596,10 @@ namespace glTFMilo.Source
                 {
                     using (var str = normalMapTexture.PrimaryImage.Content.Open())
                     {
-                        TextureUtils.ConvertToDDS(str, $"output_{curmat}_norm.dds", CompressionFormat.BC5, ignoreLimits);
+                        if (opts.Platform == "xbox")
+                            TextureUtils.ConvertToDDS(str, $"output_{curmat}_norm.dds", CompressionFormat.BC5, ignoreLimits);
+                        else
+                            TextureUtils.ConvertToDDS(str, $"output_{curmat}_norm.dds", CompressionFormat.BC1, ignoreLimits);
                         var (width, height, bpp, mipMapCount, pixels) = TextureUtils.ParseDDS($"output_{curmat}_norm.dds");
                         normalTex.width = (uint)width;
                         normalTex.height = (uint)height;
@@ -620,7 +613,10 @@ namespace glTFMilo.Source
                         normalTex.bitmap.height = (ushort)normalTex.height;
                         normalTex.bitmap.width = (ushort)normalTex.width;
                         normalTex.bitmap.bpp = (byte)normalTex.bpp;
-                        normalTex.bitmap.encoding = RndBitmap.TextureEncoding.ATI2_BC5;
+                        if (opts.Platform == "xbox")
+                            normalTex.bitmap.encoding = RndBitmap.TextureEncoding.ATI2_BC5;
+                        else
+                            normalTex.bitmap.encoding = RndBitmap.TextureEncoding.DXT1_BC1;
                         normalTex.bitmap.mipMaps = 0;
                         normalTex.bitmap.bpl = (ushort)((width * bpp) / 8);
 
