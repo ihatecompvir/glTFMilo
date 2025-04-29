@@ -26,5 +26,8 @@ namespace glTFMilo.Source
 
         [Option("ignore_tex_size_limits", Required = false, HelpText = "Allows arbitrary texture sizes rather than resizing to the max of 512 x 512. Larger textures can sometimes work, but your mileage may greatly vary by going beyond the safe maximum.")]
         public bool IgnoreTexSizeLimits { get; set; } = false;
+
+        [Option("type", Required = false, HelpText = "What the intention of the output Milo is. Supported values are character, venue, or other. Default is other.")]
+        public string Type { get; set; } = "other";
     }
 }

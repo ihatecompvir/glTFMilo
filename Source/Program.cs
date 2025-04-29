@@ -8,6 +8,7 @@ using TeximpNet;
 using TeximpNet.Compression;
 using System.Numerics;
 using CommandLine;
+using MiloLib.Classes;
 
 namespace glTFMilo.Source
 {
@@ -27,6 +28,7 @@ namespace glTFMilo.Source
             string platform = opts.Platform.ToLower();
             string gameArg = opts.Game.ToLower();
             string preLit = opts.Prelit.ToLower();
+            string type = opts.Type.ToLower();
             bool ignoreLimits = opts.IgnoreTexSizeLimits;
 
             if (!System.IO.File.Exists(filePath))
@@ -82,7 +84,11 @@ namespace glTFMilo.Source
             }
 
             meta.revision = GameRevisions.GetRevision(selectedGame).MiloRevision;
-            meta.type = "Character"; // root is a character dir, in the future we should support more kinds of dirs
+
+            if (opts.Type == "character")
+                meta.type = "Character";
+            else
+                meta.type = "RndDir";
 
             List<(string, Matrix4x4)> bandConfigurationPositions = new();
 
@@ -97,6 +103,8 @@ namespace glTFMilo.Source
                         int primitiveIndex = 0;
                         foreach (var primitive in node.Mesh.Primitives)
                         {
+                            HashSet<int> influencingJoints = new HashSet<int>();
+
                             RndMesh mesh = RndMesh.New(33, 0, 0, 0);
                             mesh.objFields.revision = 2;
                             mesh.trans = RndTrans.New(9, 0);
@@ -203,6 +211,17 @@ namespace glTFMilo.Source
                                         newVert.bone3 = (ushort)joint.W;
                                     }
 
+                                    if (joints != null && originalIndex < joints.Count)
+                                    {
+                                        var joint = joints[(int)originalIndex];
+                                        var weight = weights[(int)originalIndex];
+
+                                        if (weight.X > 0) influencingJoints.Add((int)joint.X);
+                                        if (weight.Y > 0) influencingJoints.Add((int)joint.Y);
+                                        if (weight.Z > 0) influencingJoints.Add((int)joint.Z);
+                                        if (weight.W > 0) influencingJoints.Add((int)joint.W);
+                                    }
+
                                     mesh.vertices.vertices.Add(newVert);
                                     ushort newIndex = (ushort)(mesh.vertices.vertices.Count - 1);
 
@@ -230,52 +249,36 @@ namespace glTFMilo.Source
                             }
 
 
-                            /*
+
                             // write bone transforms
                             var skin = node.Skin; // Skin associated with this mesh node
                             if (skin != null)
                             {
-                                var inverseBindMatricesAccessor = skin.GetInverseBindMatricesAccessor();
-                                if (inverseBindMatricesAccessor != null)
+                                var joints = skin.Joints;
+
+                                var boneTransList = new List<RndMesh.BoneTransform>();
+
+
+                                //foreach (var jointIndex in influencingJoints)
+                                for (int i = 0; i < joints.Count; i++)
                                 {
-                                    var gltfInverseBindMatrices = inverseBindMatricesAccessor.AsMatrix4x4Array();
-                                    var joints = skin.Joints;
+                                    var jointNode = joints[i];
+                                    //var jointNode = skin.Joints[jointIndex];
+                                    if (jointNode.Name == "neutral_bone") continue;
 
-                                    var boneTransList = new List<RndMesh.BoneTransform>();
-
-
-                                    for (int i = 0; i < 1; i++)
+                                    var miloBoneTransform = new RndMesh.BoneTransform
                                     {
-                                        var jointNode = joints[i];
-                                        var miloBoneTransform = new RndMesh.BoneTransform();
-
-                                        miloBoneTransform.name = jointNode.Name ?? $"joint_{i}";
-
-                                        miloBoneTransform.transform.m11 = jointNode.LocalMatrix.M11;
-                                        miloBoneTransform.transform.m12 = jointNode.LocalMatrix.M12;
-                                        miloBoneTransform.transform.m13 = jointNode.LocalMatrix.M13;
-                                        miloBoneTransform.transform.m21 = jointNode.LocalMatrix.M21;
-                                        miloBoneTransform.transform.m22 = jointNode.LocalMatrix.M22;
-                                        miloBoneTransform.transform.m23 = jointNode.LocalMatrix.M23;
-                                        miloBoneTransform.transform.m31 = jointNode.LocalMatrix.M31;
-                                        miloBoneTransform.transform.m32 = jointNode.LocalMatrix.M32;
-                                        miloBoneTransform.transform.m33 = jointNode.LocalMatrix.M33;
-                                        miloBoneTransform.transform.m41 = jointNode.LocalMatrix.M41;
-                                        miloBoneTransform.transform.m42 = jointNode.LocalMatrix.M42;
-                                        miloBoneTransform.transform.m43 = jointNode.LocalMatrix.M43;
-
-                                        boneTransList.Add(miloBoneTransform);
-                                    }
-                                    mesh.boneTransforms = boneTransList;
-
-
+                                        name = jointNode.Name ?? $"joint_{i}"
+                                    };
+                                    Matrix4x4.Invert(jointNode.WorldMatrix, out var boneWorldInverse);
+                                    var relativeTransform = boneWorldInverse * node.WorldMatrix;
+                                    MatrixHelpers.CopyMatrix(relativeTransform, miloBoneTransform.transform);
+                                    boneTransList.Add(miloBoneTransform);
                                 }
-                                else
-                                {
-                                    Console.WriteLine($"Warning: Skinned mesh node '{node.Name}' is linked to skin '{skin.Name ?? "Unnamed"}' which is missing the Inverse Bind Matrices accessor.");
-                                }
+                                mesh.boneTransforms = boneTransList;
+
                             }
-                            */
+
 
 
                             if (primitiveIndex == 0)
@@ -302,6 +305,11 @@ namespace glTFMilo.Source
                 }
                 else if (NodeHelpers.IsBone(node, model))
                 {
+                    // check if the bone name is in the list of rb3 skeleton bones, and ignore it if so
+                    if (BoneNames.rb3SkeletonBones.Contains(node.Name))
+                    {
+                        continue;
+                    }
                     RndTrans trans = RndTrans.New(9, 0);
                     trans.objFields.revision = 2;
                     string parentNodeName = NodeHelpers.GetParentBoneName(node, model);
@@ -333,8 +341,7 @@ namespace glTFMilo.Source
                     {
                         foreach (var child in children)
                         {
-                            // add all children to the grp
-
+                            // add all children to the grp if its not null
                             if (child != null)
                                 grp.objects.Add(child);
                         }
@@ -447,7 +454,7 @@ namespace glTFMilo.Source
                     curmat++;
                     mat.diffuseTex = material.Name + ".tex";
                     mat.stencilMode = RndMat.StencilMode.kStencilIgnore;
-                    mat.zMode = RndMat.ZMode.kZModeNormal;
+
                     mat.perPixelLit = true;
                     if (opts.Prelit != "false")
                     {
@@ -456,18 +463,29 @@ namespace glTFMilo.Source
                     mat.pointLights = true;
                     mat.projLights = true;
                     mat.fog = false;
-                    mat.cull = true;
-                    mat.shaderVariation = RndMat.ShaderVariation.kShaderVariationNone;
+                    mat.cull = !material.DoubleSided;
+                    // check if the shader name contains _skin or _hair to turn on the skin or hair shader variant
+                    if (material.Name.Contains("_skin"))
+                    {
+                        mat.shaderVariation = RndMat.ShaderVariation.kShaderVariationSkin;
+                    }
+                    else if (material.Name.Contains("_hair"))
+                    {
+                        mat.shaderVariation = RndMat.ShaderVariation.kShaderVariationHair;
+                    }
+                    else
+                    {
+                        mat.shaderVariation = RndMat.ShaderVariation.kShaderVariationNone;
+                    }
                     mat.blend = RndMat.Blend.kBlendSrc;
                     mat.emissiveMultiplier = 1.0f;
-                    mat.specularPower = 0.0f;
                     mat.normalDetailTiling = 1.0f;
                     mat.rimPower = 0.0f;
                     mat.specular2Power = 0.0f;
                     mat.rimRGB = new MiloLib.Classes.HmxColor3(0.0f, 0.0f, 0.0f, 0.0f);
                     mat.rimPower = 4.0f;
-                    mat.specularPower = 10.0f;
-                    mat.specular2Power = 10.0f;
+                    mat.specularPower = 0.0f;
+                    mat.specular2Power = 0.0f;
 
 
 
@@ -504,6 +522,36 @@ namespace glTFMilo.Source
                         CompressionFormat format = hasAlpha ? CompressionFormat.BC3 : CompressionFormat.BC1;
                         TextureUtils.ConvertToDDS(str, $"output_{curmat}.dds", format, ignoreLimits);
 
+                        // should be right
+                        //if (hasAlpha)
+                        //{
+                        //    mat.zMode = RndMat.ZMode.kZModeTransparent;
+                        //}
+                        //else
+                        //{
+                        //    mat.zMode = RndMat.ZMode.kZModeNormal;
+                        //}
+                        mat.zMode = RndMat.ZMode.kZModeNormal;
+
+                        // i think this is generally correct?
+                        if (material.Alpha == SharpGLTF.Schema2.AlphaMode.MASK)
+                        {
+                            mat.alphaCut = true;
+                            mat.alphaThreshold = (int)(material.AlphaCutoff * 255.0f);
+                            mat.blend = RndMat.Blend.kBlendSrc;
+                        }
+                        else if (hasAlpha)
+                        {
+                            mat.alphaCut = false;
+                            mat.alphaWrite = true;
+                            mat.blend = RndMat.Blend.kBlendSrcAlpha;
+                        }
+                        else
+                        {
+                            mat.alphaCut = false;
+                            mat.blend = RndMat.Blend.kBlendSrc;
+                        }
+
                         var (width, height, bpp, mipMapCount, pixels) = TextureUtils.ParseDDS($"output_{curmat}.dds");
                         tex.width = (uint)width;
                         tex.height = (uint)height;
@@ -511,6 +559,7 @@ namespace glTFMilo.Source
                         tex.externalPath = material.Name + ".png";
                         tex.mipMapK = -8.0f;
                         tex.type = RndTex.Type.kRegular;
+                        tex.optimizeForPS3 = true;
 
                         tex.bitmap = RndBitmap.New(1, 0);
                         tex.bitmap.height = (ushort)tex.height;
@@ -535,8 +584,6 @@ namespace glTFMilo.Source
                         else
                         {
                             tex.bitmap.textures.Add(pixels.ToList());
-
-                            tex.optimizeForPS3 = true;
                         }
                     }
 
@@ -549,7 +596,8 @@ namespace glTFMilo.Source
                     mat.objFields.revision = 2;
                 }
 
-                var normalMapTexture = material.FindChannel("Normal")?.Texture;
+                var normalChannel = material.FindChannel("Normal");
+                var normalMapTexture = normalChannel?.Texture;
 
                 RndTex normalTex = RndTex.New(GameRevisions.GetRevision(selectedGame).TextureRevision, 0);
                 normalTex.objFields.revision = 2;
@@ -566,6 +614,7 @@ namespace glTFMilo.Source
                         normalTex.externalPath = material.Name + "_norm.png";
                         normalTex.mipMapK = -8.0f;
                         normalTex.type = RndTex.Type.kRegular;
+                        normalTex.optimizeForPS3 = true;
 
                         normalTex.bitmap = RndBitmap.New(1, 0);
                         normalTex.bitmap.height = (ushort)normalTex.height;
@@ -574,6 +623,7 @@ namespace glTFMilo.Source
                         normalTex.bitmap.encoding = RndBitmap.TextureEncoding.ATI2_BC5;
                         normalTex.bitmap.mipMaps = 0;
                         normalTex.bitmap.bpl = (ushort)((width * bpp) / 8);
+
 
                         if (meta.platform == DirectoryMeta.Platform.Xbox)
                         {
@@ -590,8 +640,6 @@ namespace glTFMilo.Source
                         else
                         {
                             normalTex.bitmap.textures.Add(pixels.ToList());
-
-                            normalTex.optimizeForPS3 = true;
                         }
                     }
 
@@ -603,79 +651,259 @@ namespace glTFMilo.Source
                     meta.entries.Add(texEntry);
                 }
 
-            }
 
-            // create a new Group with all the geometry inside of it
-            RndGroup allGeomGrp = RndGroup.New(GameRevisions.GetRevision(selectedGame).GroupRevision, 0);
+                // emissive map
+                /*
+                var emissiveChannel = material.FindChannel("Emissive");
+                var emissiveMapTexture = emissiveChannel?.Texture;
 
-            allGeomGrp.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
-            allGeomGrp.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
-            allGeomGrp.draw.sphere = new MiloLib.Classes.Sphere();
-            allGeomGrp.draw.sphere.radius = 10000.0f;
-            allGeomGrp.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
 
-            allGeomGrp.objFields.revision = 2;
+                RndTex emissiveTex = RndTex.New(GameRevisions.GetRevision(selectedGame).TextureRevision, 0);
+                emissiveTex.objFields.revision = 2;
 
-            foreach (var entry in meta.entries)
-            {
-                if (entry.type == "Mesh")
+
+                if (emissiveMapTexture != null)
                 {
-                    allGeomGrp.objects.Add(entry.name);
+                    using (var str = emissiveMapTexture.PrimaryImage.Content.Open())
+                    {
+                        TextureUtils.ConvertToDDS(str, $"output_{curmat}_emissive.dds", CompressionFormat.BC1, ignoreLimits);
+                        var (width, height, bpp, mipMapCount, pixels) = TextureUtils.ParseDDS($"output_{curmat}_emissive.dds");
+                        emissiveTex.width = (uint)width;
+                        emissiveTex.height = (uint)height;
+                        emissiveTex.bpp = (uint)bpp;
+                        emissiveTex.externalPath = material.Name + "_emissive.png";
+                        emissiveTex.mipMapK = -8.0f;
+                        emissiveTex.type = RndTex.Type.kRegular;
+
+                        emissiveTex.bitmap = RndBitmap.New(1, 0);
+                        emissiveTex.bitmap.height = (ushort)emissiveTex.height;
+                        emissiveTex.bitmap.width = (ushort)emissiveTex.width;
+                        emissiveTex.bitmap.bpp = (byte)emissiveTex.bpp;
+                        emissiveTex.bitmap.encoding = RndBitmap.TextureEncoding.DXT1_BC1;
+                        emissiveTex.bitmap.mipMaps = 0;
+                        emissiveTex.bitmap.bpl = (ushort)((width * bpp) / 8);
+
+                        if (meta.platform == DirectoryMeta.Platform.Xbox)
+                        {
+                            List<byte> swapped = new List<byte>();
+                            for (int i = 0; i < pixels.Length; i += 4)
+                            {
+                                swapped.Add(pixels[i + 1]);
+                                swapped.Add(pixels[i]);
+                                swapped.Add(pixels[i + 3]);
+                                swapped.Add(pixels[i + 2]);
+                            }
+                            emissiveTex.bitmap.textures.Add(swapped);
+                        }
+                        else
+                        {
+                            emissiveTex.bitmap.textures.Add(pixels.ToList());
+
+                            emissiveTex.optimizeForPS3 = true;
+                        }
+                    }
+
+                    mat.emissiveMap = material.Name + "_emissive.tex";
+                    mat.emissiveMultiplier = 1.0f;
+
+                    File.Delete($"output_{curmat}_emissive.dds");
+
+                    DirectoryMeta.Entry emissiveTexEntry = new DirectoryMeta.Entry("Tex", material.Name + "_emissive.tex", emissiveTex);
+                    meta.entries.Add(emissiveTexEntry);
+                }
+                */
+
+
+                // specular color map
+                var specularColorMapTexture = material.FindChannel("SpecularColor")?.Texture;
+                var specularColor = material.FindChannel("SpecularColor");
+
+                /*
+                RndTex specularColorMapTex = RndTex.New(GameRevisions.GetRevision(selectedGame).TextureRevision, 0);
+                specularColorMapTex.objFields.revision = 2;
+
+                if (specularColorMapTexture != null)
+                {
+                    using (var str = specularColorMapTexture.PrimaryImage.Content.Open())
+                    {
+                        TextureUtils.ConvertToDDS(str, $"output_{curmat}_spec.dds", CompressionFormat.BC3, ignoreLimits);
+                        var (width, height, bpp, mipMapCount, pixels) = TextureUtils.ParseDDS($"output_{curmat}_spec.dds");
+                        specularColorMapTex.width = (uint)width;
+                        specularColorMapTex.height = (uint)height;
+                        specularColorMapTex.bpp = (uint)bpp;
+                        specularColorMapTex.externalPath = material.Name + "_spec.png";
+                        specularColorMapTex.mipMapK = -8.0f;
+                        specularColorMapTex.type = RndTex.Type.kRegular;
+
+                        specularColorMapTex.bitmap = RndBitmap.New(1, 0);
+                        specularColorMapTex.bitmap.height = (ushort)specularColorMapTex.height;
+                        specularColorMapTex.bitmap.width = (ushort)specularColorMapTex.width;
+                        specularColorMapTex.bitmap.bpp = (byte)specularColorMapTex.bpp;
+                        specularColorMapTex.bitmap.encoding = RndBitmap.TextureEncoding.DXT5_BC3;
+                        specularColorMapTex.bitmap.mipMaps = 0;
+                        specularColorMapTex.bitmap.bpl = (ushort)((width * bpp) / 8);
+
+                        if (meta.platform == DirectoryMeta.Platform.Xbox)
+                        {
+                            List<byte> swapped = new List<byte>();
+                            for (int i = 0; i < pixels.Length; i += 4)
+                            {
+                                swapped.Add(pixels[i + 1]);
+                                swapped.Add(pixels[i]);
+                                swapped.Add(pixels[i + 3]);
+                                swapped.Add(pixels[i + 2]);
+                            }
+                            specularColorMapTex.bitmap.textures.Add(swapped);
+                        }
+                        else
+                        {
+                            specularColorMapTex.bitmap.textures.Add(pixels.ToList());
+
+                            specularColorMapTex.optimizeForPS3 = true;
+                        }
+                    }
+
+                    mat.specularMap = material.Name + "_spec.tex";
+
+                    File.Delete($"output_{curmat}_spec.dds");
+
+                    DirectoryMeta.Entry specularTexEntry = new DirectoryMeta.Entry("Tex", material.Name + "_spec.tex", specularColorMapTex);
+                    meta.entries.Add(specularTexEntry);
+                }
+                */
+
+                if (specularColor != null)
+                {
+                    mat.specularRGB = new HmxColor3(specularColor.Value.Color.X, specularColor.Value.Color.Y, specularColor.Value.Color.Z, specularColor.Value.Color.W);
+                }
+
+                var specularFactor = material.FindChannel("SpecularFactor");
+                if (specularFactor != null)
+                {
+                    mat.specularPower = (float)specularFactor.Value.Parameters[0].Value;
                 }
             }
 
-            DirectoryMeta.Entry grpEntry = new DirectoryMeta.Entry("Group", filename + "_geom.grp", allGeomGrp);
-            meta.entries.Add(grpEntry);
+
+            // only create the all geom group if its a venue we are trying to produce
+            if (opts.Type == "venue")
+            {
+                // create a new Group with all the geometry inside of it
+                RndGroup allGeomGrp = RndGroup.New(GameRevisions.GetRevision(selectedGame).GroupRevision, 0);
+
+                allGeomGrp.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
+                allGeomGrp.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
+                allGeomGrp.draw.sphere = new MiloLib.Classes.Sphere();
+                allGeomGrp.draw.sphere.radius = 10000.0f;
+                allGeomGrp.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
+
+                allGeomGrp.objFields.revision = 2;
+
+                foreach (var entry in meta.entries)
+                {
+                    if (entry.type == "Mesh")
+                    {
+                        allGeomGrp.objects.Add(entry.name);
+                    }
+                }
+
+                DirectoryMeta.Entry grpEntry = new DirectoryMeta.Entry("Group", filename + "_geom.grp", allGeomGrp);
+                meta.entries.Add(grpEntry);
+            }
+
+
+            if (opts.Type == "character")
+            {
+                Character character = Character.New(GameRevisions.GetRevision(selectedGame).CharacterRevision, 0);
+                character.viewports = new();
+
+                if (selectedGame == Game.RockBand3)
+                {
+                    // include an absolute reference to char_shared which will link the skeleton bones to this milo
+                    character.subDirs.Add("../../shared/char_shared.milo");
+                }
+
+                // default empty viewports, still not sure what viewports even are
+                character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                character.currentViewportIdx = 6;
+
+                character.objFields.revision = 2;
+
+                // give it a huge radius so it will always appear
+                character.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
+                character.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
+                character.draw.sphere.radius = 10000.0f;
+                character.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
+                character.sphereBase = meta.name;
+
+                character.charTest = Character.CharacterTesting.New(GameRevisions.GetRevision(selectedGame).CharacterTestingRevision, 0);
+                character.charTest.distMap = "none";
+
+
+                // reflection hack to set revisions until I implement something proper in MiloLib
+                // TODO: GET RID OF THIS SHIT
+                typeof(RndDir)
+                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .SetValue(character, (ushort)GameRevisions.GetRevision(selectedGame).RndDirRevision);
+
+                typeof(ObjectDir)
+                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .SetValue(character, (ushort)GameRevisions.GetRevision(selectedGame).ObjectDirRevision);
+
+                // todo: restore this but use the git commit hash
+                //character.objFields.note = "Milo created with glTFMilo";
 
 
 
-            Character character = Character.New(GameRevisions.GetRevision(selectedGame).CharacterRevision, 0);
-            character.viewports = new();
-
-            // default empty viewports, still not sure what viewports even are
-            character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-            character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-            character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-            character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-            character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-            character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-            character.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-            character.currentViewportIdx = 6;
-
-            character.objFields.revision = 2;
-
-            // give it a huge radius so it will always appear
-            character.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
-            character.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
-            character.draw.sphere.radius = 10000.0f;
-            character.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
-            character.sphereBase = meta.name;
-
-            character.charTest = Character.CharacterTesting.New(GameRevisions.GetRevision(selectedGame).CharacterTestingRevision, 0);
-            character.charTest.distMap = "none";
+                meta.directory = character;
 
 
-            // reflection hack to set revisions until I implement something proper in MiloLib
-            // TODO: GET RID OF THIS SHIT
-            typeof(RndDir)
-                .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                .SetValue(character, (ushort)GameRevisions.GetRevision(selectedGame).RndDirRevision);
+                MiloFile miloFile = new MiloFile(meta);
 
-            typeof(ObjectDir)
-                .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                .SetValue(character, (ushort)GameRevisions.GetRevision(selectedGame).ObjectDirRevision);
+                miloFile.Save(opts.Output, MiloFile.Type.Uncompressed, 0x810, MiloLib.Utils.Endian.LittleEndian, MiloLib.Utils.Endian.BigEndian);
+            }
+            else
+            {
+                RndDir rndDir = new RndDir(0, 0);
+                rndDir.viewports = new();
 
-            // todo: restore this but use the git commit hash
-            //character.objFields.note = "Milo created with glTFMilo";
+                // default empty viewports, still not sure what viewports even are
+                rndDir.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                rndDir.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                rndDir.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                rndDir.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                rndDir.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                rndDir.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                rndDir.viewports.Add(new MiloLib.Classes.Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
+                rndDir.currentViewportIdx = 6;
+                rndDir.objFields.revision = 2;
+                rndDir.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
+                rndDir.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
+                rndDir.draw.sphere.radius = 10000.0f;
+                rndDir.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
 
 
+                typeof(ObjectDir)
+                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .SetValue(rndDir, (ushort)GameRevisions.GetRevision(selectedGame).ObjectDirRevision);
 
-            meta.directory = character;
+                typeof(RndDir)
+                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .SetValue(rndDir, (ushort)GameRevisions.GetRevision(selectedGame).RndDirRevision);
+
+                meta.directory = rndDir;
 
 
-            MiloFile miloFile = new MiloFile(meta);
+                MiloFile miloFile = new MiloFile(meta);
 
-            miloFile.Save(opts.Output, MiloFile.Type.Uncompressed, 0x810, MiloLib.Utils.Endian.LittleEndian, MiloLib.Utils.Endian.BigEndian);
+                miloFile.Save(opts.Output, MiloFile.Type.Uncompressed, 0x810, MiloLib.Utils.Endian.LittleEndian, MiloLib.Utils.Endian.BigEndian);
+            }
 
             Console.WriteLine("Milo scene created at " + opts.Output);
         }
