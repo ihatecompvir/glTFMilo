@@ -1,0 +1,55 @@
+#define CUSTOM_CHAR_HOOK
+(
+   {ui foreach_screen $screen
+      {$screen foreach_panel $panel
+         {if {$panel loaded_dir}
+            {{$panel loaded_dir} iterate RndDir $b
+               {$b iterate BandCharacter $c
+                  {$c iterate RndDir $y
+                     {if {|| {== $y outfit} {== $y instrument}}
+                        {do
+                           ($found_custom FALSE)
+                           {set_this $y}
+                           {$this iterate Mesh $m
+                              {if {has_substr {$m name} "gltf_"}
+                                 {set $found_custom TRUE}
+                              }
+                           }
+                           {if $found_custom
+                              {$this iterate Mesh $m
+                                 {if {! {has_substr {$m name} "gltf_"}}
+                                    {$m set_showing FALSE}
+                                 }
+                              }
+                           }
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+)
+;ensure we don't push into something that doesn't exist
+{if {find_exists $syscfg objects BandCamShot types band start_shot}
+   {if {! $char_exec}
+      ;dont push multiple times
+      {set $char_exec TRUE}
+      {push_back {find $syscfg objects BandCamShot types band start_shot}
+         {quote
+            CUSTOM_CHAR_HOOK
+         }
+      }
+      {push_back {find $syscfg objects BandCamShot types band3 start_shot}
+         {quote
+            CUSTOM_CHAR_HOOK
+         }
+      }
+      {push_back {find $syscfg objects BandCamShot types closet start_shot}
+         {quote
+            CUSTOM_CHAR_HOOK
+         }
+      }
+   }
+}
