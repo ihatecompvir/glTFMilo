@@ -1,5 +1,5 @@
 ;ensure we don't push into something that doesn't exist
-{if {! $char_exec}
+{if {&& {! $char_exec} {find_exists $syscfg objects BandCamShot types band start_shot}}
    ;dont push multiple times
    {set $char_exec TRUE}
    {foreach $elem (band band3 closet)
