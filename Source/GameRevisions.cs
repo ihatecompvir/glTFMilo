@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace glTFMilo.Source
 {
-    public enum Game
+    public enum MiloGame
     {
         RockBand3,
         TheBeatlesRockBand,
@@ -19,7 +19,7 @@ namespace glTFMilo.Source
         public static List<GameRevisions> revs = new List<GameRevisions>
         {
             new GameRevisions(
-                Game.RockBand3,
+                MiloGame.RockBand3,
                 rndDir: 10,
                 model: 33,
                 objDir: 27,
@@ -36,7 +36,7 @@ namespace glTFMilo.Source
                 light: 0x10
             ),
             new GameRevisions(
-                Game.TheBeatlesRockBand,
+                MiloGame.TheBeatlesRockBand,
                 rndDir: 10,
                 model: 33,
                 objDir: 22,
@@ -53,7 +53,7 @@ namespace glTFMilo.Source
                 light: 0xD
             ),
             new GameRevisions(
-                Game.RockBand2,
+                MiloGame.RockBand2,
                 rndDir: 10,
                 model: 33,
                 objDir: 20,
@@ -71,12 +71,12 @@ namespace glTFMilo.Source
             )
         };
 
-        public static GameRevisions GetRevision(Game game)
+        public static GameRevisions GetRevision(MiloGame game)
         {
             return revs.FirstOrDefault(x => x.Game == game);
         }
 
-        public Game Game;
+        public MiloGame Game;
         public ushort RndDirRevision;
         public ushort ModelRevision;
         public ushort ObjectDirRevision;
@@ -93,7 +93,7 @@ namespace glTFMilo.Source
         public ushort LightRevision;
 
         public GameRevisions(
-            Game game,
+            MiloGame game,
             ushort rndDir,
             ushort model,
             ushort objDir,

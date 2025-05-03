@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.13.35931.197
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "glTFMilo", "glTFMilo.csproj", "{7132DB84-779C-4BAC-9686-3FF7E7926E5B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiloGLTFUtils", "MiloGLTFUtils.csproj", "{7132DB84-779C-4BAC-9686-3FF7E7926E5B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiloLib", ".\external\MiloEditor\MiloLib\MiloLib.csproj", "{822FA3F6-E5BB-FEFD-032E-30CE27801DD3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiloLib", "external\MiloEditor\MiloLib\MiloLib.csproj", "{822FA3F6-E5BB-FEFD-032E-30CE27801DD3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
