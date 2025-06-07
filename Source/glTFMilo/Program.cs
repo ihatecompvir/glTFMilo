@@ -2,6 +2,7 @@
 using MiloLib;
 using MiloLib.Assets;
 using MiloLib.Assets.Char;
+using MiloLib.Assets.P9;
 using MiloLib.Assets.Rnd;
 using MiloLib.Classes;
 using SharpGLTF.Memory;
@@ -22,6 +23,7 @@ namespace MiloGLTFUtils.Source.glTFMilo
             string platform = opts.Platform.ToLower();
             string gameArg = opts.Game.ToLower();
             string preLit = opts.Prelit.ToLower();
+            string outfitConfig = opts.OutfitConfig.ToLower();
             string type = opts.Type.ToLower();
             bool ignoreLimits = opts.IgnoreTexSizeLimits;
 
@@ -34,6 +36,13 @@ namespace MiloGLTFUtils.Source.glTFMilo
             if (!filePath.EndsWith(".gltf") && !filePath.EndsWith(".glb"))
             {
                 Console.WriteLine("File is not a glTF file.");
+                return;
+            }
+
+            // if they set an outfitconfig, check it exists
+            if (!string.IsNullOrEmpty(outfitConfig) && !File.Exists(outfitConfig))
+            {
+                Console.WriteLine($"Specified OutfitConfig file {outfitConfig} does not exist.");
                 return;
             }
 
@@ -894,6 +903,117 @@ namespace MiloGLTFUtils.Source.glTFMilo
 
                 DirectoryMeta.Entry grpEntry = new DirectoryMeta.Entry("Group", filename + "_geom.grp", allGeomGrp);
                 meta.entries.Add(grpEntry);
+            }
+
+            // if they specified an OutfitConfig, create it
+            if (opts.Type == "character" && opts.OutfitConfig != null && opts.OutfitConfig != string.Empty)
+            {
+                OutfitConfig config = new OutfitConfig();
+                typeof(OutfitConfig)
+                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .SetValue(config, GameRevisions.GetRevision(selectedGame).OutfitConfigRevision);
+
+                OutfitConfigJSON outfitConfigJSON;
+                if (File.Exists(opts.OutfitConfig))
+                {
+                    string json = File.ReadAllText(opts.OutfitConfig);
+                    outfitConfigJSON = System.Text.Json.JsonSerializer.Deserialize<OutfitConfigJSON>(json);
+                }
+                else
+                {
+                    Console.WriteLine($"Specified OutfitConfig file {opts.OutfitConfig} does not exist.");
+                    return;
+                }
+
+                if (outfitConfigJSON != null)
+                {
+
+                    config.objFields.revision = 2;
+
+                    config.computeAO = outfitConfigJSON.ComputeAO;
+
+                    // mat swaps
+                    if (outfitConfigJSON.MatSwaps != null && outfitConfigJSON.MatSwaps.Count > 0)
+                    {
+                        foreach (var swap in outfitConfigJSON.MatSwaps)
+                        {
+                            OutfitConfig.MatSwap matSwap = new OutfitConfig.MatSwap();
+                            matSwap.resourceMat = swap.ResourceMat;
+                            matSwap.mat = swap.Mat;
+                            matSwap.twoColorDiffuse = swap.TwoColorDiffuseTex;
+                            matSwap.twoColorMask = swap.TwoColorMaskTex;
+                            matSwap.twoColorInterp = swap.TwoColorInterpTex;
+
+                            if (swap.Textures != null && swap.Textures.Count > 0)
+                            {
+                                matSwap.textures = new List<Symbol>();
+                                foreach (var tex in swap.Textures)
+                                {
+                                    matSwap.textures.Add(tex);
+                                }
+                            }
+
+                            if (swap.Color1Palette != null && swap.Color1Palette.Count > 0)
+                            {
+                                // create a new ColorPalette
+                                ColorPalette pal = new ColorPalette();
+                                typeof(ColorPalette)
+                                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
+                                    .SetValue(pal, (ushort)1);
+                                pal.objFields.revision = 2;
+                                pal.colors = new List<HmxColor4>();
+                                foreach (var color in swap.Color1Palette)
+                                {
+                                    pal.colors.Add(new HmxColor4(color.R, color.G, color.B, color.A));
+                                }
+                                DirectoryMeta.Entry palEntry = new DirectoryMeta.Entry("ColorPalette", "outfit_config_pal1.pal", pal);
+                                meta.entries.Add(palEntry);
+
+                                matSwap.color1Palette = palEntry.name;
+                            }
+
+                            if (swap.Color2Palette != null && swap.Color2Palette.Count > 0)
+                            {
+                                // create a new ColorPalette
+                                ColorPalette pal = new ColorPalette();
+                                typeof(ColorPalette)
+                                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
+                                    .SetValue(pal, (ushort)1);
+                                pal.objFields.revision = 2;
+                                pal.colors = new List<HmxColor4>();
+                                foreach (var color in swap.Color2Palette)
+                                {
+                                    pal.colors.Add(new HmxColor4(color.R, color.G, color.B, color.A));
+                                }
+                                DirectoryMeta.Entry palEntry = new DirectoryMeta.Entry("ColorPalette", "outfit_config_pal2.pal", pal);
+                                meta.entries.Add(palEntry);
+                                matSwap.color2Palette = palEntry.name;
+                            }
+                        }
+                    }
+
+                    if (outfitConfigJSON.Overlays != null && outfitConfigJSON.Overlays.Count > 0)
+                    {
+                        config.overlays = new List<OutfitConfig.Overlay>();
+                        foreach (var overlay in outfitConfigJSON.Overlays)
+                        {
+                            OutfitConfig.Overlay overlayEntry = new OutfitConfig.Overlay();
+                            overlayEntry.category = overlay.Category;
+                            overlayEntry.texture = overlay.Texture;
+                            config.overlays.Add(overlayEntry);
+                        }
+                    }
+
+                    config.texBlender = outfitConfigJSON.TexBlender;
+                    config.wrinkleBlender = outfitConfigJSON.WrinkleBlender;
+                    config.bandLogo = outfitConfigJSON.BandLogo;
+
+
+
+
+                    DirectoryMeta.Entry entry = new DirectoryMeta.Entry("OutfitConfig", "outfig_config.cfg", config);
+                    meta.entries.Add(entry);
+                }
             }
 
 

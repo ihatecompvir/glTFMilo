@@ -33,6 +33,7 @@ namespace glTFMilo.Source
                 group: 0xE,
                 charTest: 15,
                 milo: 28,
+                outfit: 27,
                 light: 0x10
             ),
             new GameRevisions(
@@ -50,6 +51,7 @@ namespace glTFMilo.Source
                 group: 14,
                 charTest: 10,
                 milo: 25,
+                outfit: 0x0,
                 light: 0xD
             ),
             new GameRevisions(
@@ -67,6 +69,7 @@ namespace glTFMilo.Source
                 group: 13,
                 charTest: 8,
                 milo: 25,
+                outfit: 0x0,
                 light: 0xC
             )
         };
@@ -90,6 +93,7 @@ namespace glTFMilo.Source
         public ushort GroupRevision;
         public ushort CharacterTestingRevision;
         public ushort MiloRevision;
+        public ushort OutfitConfigRevision;
         public ushort LightRevision;
 
         public GameRevisions(
@@ -107,6 +111,7 @@ namespace glTFMilo.Source
             ushort group,
             ushort charTest,
             ushort milo,
+            ushort outfit,
             ushort light)
         {
             Game = game;
@@ -123,6 +128,7 @@ namespace glTFMilo.Source
             GroupRevision = group;
             CharacterTestingRevision = charTest;
             MiloRevision = milo;
+            OutfitConfigRevision = outfit;
             LightRevision = light;
         }
     }
