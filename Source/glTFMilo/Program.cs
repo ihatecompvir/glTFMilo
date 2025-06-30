@@ -2,7 +2,6 @@
 using MiloLib;
 using MiloLib.Assets;
 using MiloLib.Assets.Char;
-using MiloLib.Assets.P9;
 using MiloLib.Assets.Rnd;
 using MiloLib.Classes;
 using SharpGLTF.Memory;
@@ -106,7 +105,6 @@ namespace MiloGLTFUtils.Source.glTFMilo
                         int primitiveIndex = 0;
                         foreach (var primitive in node.Mesh.Primitives)
                         {
-                            HashSet<int> influencingJoints = new HashSet<int>();
 
                             RndMesh mesh = RndMesh.New(33, 0, 0, 0);
                             mesh.objFields.revision = 2;
@@ -123,6 +121,8 @@ namespace MiloGLTFUtils.Source.glTFMilo
 
                             MatrixHelpers.CopyMatrix(node.LocalMatrix, mesh.trans.localXfm);
                             MatrixHelpers.CopyMatrix(node.WorldMatrix, mesh.trans.worldXfm);
+
+                            List<string> influencingJoints = new List<string>();
 
                             if (node.Mesh != null)
                             {
@@ -204,6 +204,21 @@ namespace MiloGLTFUtils.Source.glTFMilo
                                 var originalIndexToNewIndex = new Dictionary<uint, ushort>();
                                 mesh.vertices.vertices.Clear();
 
+                                if (joints != null && weights != null)
+                                {
+                                    for (int i = 0; i < joints.Count; i++)
+                                    {
+                                        var joint = joints[i];
+                                        var weight = weights[i];
+
+                                        // these are all the joints that influence this particular mesh
+                                        if (weight.X > 0 && !influencingJoints.Contains(node.Skin.Joints[(int)joint.X].Name)) influencingJoints.Add(node.Skin.Joints[(int)joint.X].Name);
+                                        if (weight.Y > 0 && !influencingJoints.Contains(node.Skin.Joints[(int)joint.Y].Name)) influencingJoints.Add(node.Skin.Joints[(int)joint.Y].Name);
+                                        if (weight.Z > 0 && !influencingJoints.Contains(node.Skin.Joints[(int)joint.Z].Name)) influencingJoints.Add(node.Skin.Joints[(int)joint.Z].Name);
+                                        if (weight.W > 0 && !influencingJoints.Contains(node.Skin.Joints[(int)joint.W].Name)) influencingJoints.Add(node.Skin.Joints[(int)joint.W].Name);
+                                    }
+                                }
+
                                 for (uint originalIndex = 0; originalIndex < positions.Count; ++originalIndex)
                                 {
 
@@ -240,12 +255,12 @@ namespace MiloGLTFUtils.Source.glTFMilo
 
                                     if (weights != null && originalIndex < weights.Count)
                                     {
-                                        // write weights, if the mesh is not skinned
                                         var weight = weights[(int)originalIndex];
                                         newVert.weight0 = weight.X;
                                         newVert.weight1 = weight.Y;
                                         newVert.weight2 = weight.Z;
                                         newVert.weight3 = weight.W;
+
                                     }
                                     else if (colors != null && originalIndex < colors.Count)
                                     {
@@ -265,24 +280,13 @@ namespace MiloGLTFUtils.Source.glTFMilo
 
                                     if (joints != null && originalIndex < joints.Count)
                                     {
-                                        // i presume this to be correct, who knows if it is *shrug*
-                                        // it seems to be, anyway
                                         var joint = joints[(int)originalIndex];
-                                        newVert.bone0 = (ushort)joint.X;
-                                        newVert.bone1 = (ushort)joint.Y;
-                                        newVert.bone2 = (ushort)joint.Z;
-                                        newVert.bone3 = (ushort)joint.W;
-                                    }
 
-                                    if (joints != null && originalIndex < joints.Count)
-                                    {
-                                        var joint = joints[(int)originalIndex];
-                                        var weight = weights[(int)originalIndex];
-
-                                        if (weight.X > 0) influencingJoints.Add((int)joint.X);
-                                        if (weight.Y > 0) influencingJoints.Add((int)joint.Y);
-                                        if (weight.Z > 0) influencingJoints.Add((int)joint.Z);
-                                        if (weight.W > 0) influencingJoints.Add((int)joint.W);
+                                        // use the index of the influencing bone name to set the bone indices
+                                        newVert.bone0 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.X].Name);
+                                        newVert.bone1 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.Y].Name);
+                                        newVert.bone2 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.Z].Name);
+                                        newVert.bone3 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.W].Name);
                                     }
 
                                     mesh.vertices.vertices.Add(newVert);
@@ -314,63 +318,28 @@ namespace MiloGLTFUtils.Source.glTFMilo
 
 
                             // write bone transforms
-                            if (opts.Type == "instrument")
+                            var skin = node.Skin;
+                            if (skin != null)
                             {
-                                var skin = node.Skin; // Skin associated with this mesh node
-                                if (skin != null)
+                                var joints = skin.Joints;
+                                var boneTransList = new List<RndMesh.BoneTransform>();
+
+                                for (int i = 0; i < influencingJoints.Count; i++)
                                 {
-                                    var joints = skin.Joints;
+                                    // linq to the rescue
+                                    var jointNode = joints.FirstOrDefault(j => j.Name == influencingJoints[i]);
+                                    if (jointNode.Name == "neutral_bone") continue;
 
-                                    var boneTransList = new List<RndMesh.BoneTransform>();
-
-
-                                    foreach (var jointIndex in influencingJoints)
+                                    var miloBoneTransform = new RndMesh.BoneTransform
                                     {
-                                        var jointNode = skin.Joints[jointIndex];
-                                        if (jointNode.Name == "neutral_bone") continue;
-
-                                        var miloBoneTransform = new RndMesh.BoneTransform
-                                        {
-                                            name = jointNode.Name ?? $"joint_{jointIndex}"
-                                        };
-                                        Matrix4x4.Invert(jointNode.WorldMatrix, out var boneWorldInverse);
-                                        var relativeTransform = boneWorldInverse * node.WorldMatrix;
-                                        MatrixHelpers.CopyMatrix(relativeTransform, miloBoneTransform.transform);
-                                        boneTransList.Add(miloBoneTransform);
-                                    }
-                                    mesh.boneTransforms = boneTransList;
-
+                                        name = jointNode.Name ?? $"joint_{i}"
+                                    };
+                                    Matrix4x4.Invert(jointNode.WorldMatrix, out var boneWorldInverse);
+                                    var relativeTransform = boneWorldInverse * node.WorldMatrix;
+                                    MatrixHelpers.CopyMatrix(relativeTransform, miloBoneTransform.transform);
+                                    boneTransList.Add(miloBoneTransform);
                                 }
-                            }
-                            else
-                            {
-                                var skin = node.Skin; // Skin associated with this mesh node
-                                if (skin != null)
-                                {
-                                    var joints = skin.Joints;
-
-                                    var boneTransList = new List<RndMesh.BoneTransform>();
-
-
-                                    //foreach (var jointIndex in influencingJoints)
-                                    for (int i = 0; i < joints.Count; i++)
-                                    {
-                                        var jointNode = joints[i];
-                                        //var jointNode = skin.Joints[jointIndex];
-                                        if (jointNode.Name == "neutral_bone") continue;
-
-                                        var miloBoneTransform = new RndMesh.BoneTransform
-                                        {
-                                            name = jointNode.Name ?? $"joint_{i}"
-                                        };
-                                        Matrix4x4.Invert(jointNode.WorldMatrix, out var boneWorldInverse);
-                                        var relativeTransform = boneWorldInverse * node.WorldMatrix;
-                                        MatrixHelpers.CopyMatrix(relativeTransform, miloBoneTransform.transform);
-                                        boneTransList.Add(miloBoneTransform);
-                                    }
-                                    mesh.boneTransforms = boneTransList;
-
-                                }
+                                mesh.boneTransforms = boneTransList;
                             }
 
 
@@ -429,6 +398,8 @@ namespace MiloGLTFUtils.Source.glTFMilo
                 }
                 else if (NodeHelpers.IsGroupNode(node, model))
                 {
+                    if (node.Name == "Armature")
+                        continue; // skip the armature node, it is not a group node in the sense we want to export
                     RndGroup grp = RndGroup.New(GameRevisions.GetRevision(selectedGame).GroupRevision, 0);
                     grp.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
                     grp.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
