@@ -219,6 +219,12 @@ namespace MiloGLTFUtils.Source.glTFMilo
                                     }
                                 }
 
+                                // check if there are more than 40 influencing joints
+                                if (influencingJoints.Count > 40)
+                                {
+                                    throw new InvalidDataException($"{node.Name} has more than 40 influencing bones, this will crash the game, so we cannot proceed. Please split the mesh into multiple parts so no single part influences more than 40 bones.");
+                                }
+
                                 for (uint originalIndex = 0; originalIndex < positions.Count; ++originalIndex)
                                 {
 
