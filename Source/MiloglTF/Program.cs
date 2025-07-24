@@ -18,7 +18,7 @@ namespace MiloGLTFUtils.Source.MiloglTF
             // check if the file exists
             if (!File.Exists(inputPath))
             {
-                Console.WriteLine($"File {inputPath} does not exist.");
+                Logger.Error($"File {inputPath} does not exist.");
                 return;
             }
 
@@ -28,14 +28,14 @@ namespace MiloGLTFUtils.Source.MiloglTF
                 !inputPath.EndsWith(".milo_ps3", StringComparison.OrdinalIgnoreCase) &&
                 !inputPath.EndsWith(".milo", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine($"File {inputPath} does not have a valid extension. Supported extensions are .milo_wii, .milo_xbox, .milo_ps3, and .milo.");
+                Logger.Error($"File {inputPath} does not have a valid extension. Supported extensions are .milo_wii, .milo_xbox, .milo_ps3, and .milo.");
                 return;
             }
 
             // check that the output extension is either glb or gltf
             if (!outputPath.EndsWith(".glb", StringComparison.OrdinalIgnoreCase) && !outputPath.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine($"Output file {outputPath} does not have a valid extension. Supported extensions are .glb and .gltf.");
+                Logger.Error($"Output file {outputPath} does not have a valid extension. Supported extensions are .glb and .gltf.");
                 return;
             }
 

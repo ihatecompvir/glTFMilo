@@ -1,5 +1,6 @@
 ﻿using TeximpNet.Compression;
 using TeximpNet;
+using MiloGLTFUtils.Source;
 
 namespace glTFMilo.Source
 {
@@ -13,10 +14,10 @@ namespace glTFMilo.Source
 
             Surface image = Surface.LoadFromStream(inputStream);
             if (image == null)
-                throw new InvalidOperationException("Failed to load input image from stream.");
+                throw new InvalidOperationException("Failed to load input image from stream. Ensure the stream contains a valid image format supported by TeximpNet.");
 
             if (image.Width % 4 != 0 || image.Height % 4 != 0)
-                throw new InvalidOperationException($"BC1 compression requires image dimensions to be multiples of 4. Current dimensions: {image.Width}x{image.Height}");
+                throw new InvalidOperationException($"Invalid image dimensions for BC1 compression. Width and height must be multiples of 4. Current: {image.Width}x{image.Height}. Please resize your image accordingly.");
 
             // check if either dimension is larger than 2048 x 2048 (which seems to be the limit to textures in Milo)
             if (image.Width > 512 || image.Height > 512)
@@ -30,7 +31,7 @@ namespace glTFMilo.Source
                     bool succeeded = image.Resize(newWidth, newHeight, ImageFilter.Lanczos3);
                     if (!succeeded)
                     {
-                        throw new InvalidOperationException($"Failed to resize image to {newWidth}x{newHeight}.");
+                        throw new InvalidOperationException($"Image exceeded size limits (512x512) and failed to auto-resize to {newWidth}x{newHeight}. Try manually resizing the image or check for invalid image data.");
                     }
                 }
             }
@@ -66,7 +67,7 @@ namespace glTFMilo.Source
             byte[] fileBytes = File.ReadAllBytes(ddsFilePath);
             if (fileBytes.Length <= 128)
             {
-                Console.WriteLine("Invalid DDS file.");
+                Logger.Error("Invalid DDS file.");
                 return (0, 0, 0, 0, new byte[0]);
             }
 
@@ -75,7 +76,7 @@ namespace glTFMilo.Source
             {
                 // Check magic number "DDS " to see if we are really dealing with a dds
                 if (br.ReadUInt32() != 0x20534444)
-                    throw new InvalidOperationException("Not a valid DDS file.");
+                    throw new InvalidOperationException("File does not start with DDS magic number. Make sure the file is actually a valid DDS file.");
 
                 br.BaseStream.Seek(8, SeekOrigin.Current);
                 int height = br.ReadInt32();
@@ -93,7 +94,7 @@ namespace glTFMilo.Source
                     0x33545844 => 8, // 'DXT3' = BC2 = 8 bpp
                     0x35545844 => 8, // 'DXT5' = BC3 = 8 bpp
                     0x32495441 => 8, // 'ATI2' = BC5 = 8 bpp
-                    _ => throw new NotSupportedException($"Unsupported format FourCC: 0x{fourCC:X}")
+                    _ => throw new NotSupportedException($"Unsupported DDS compression format (FourCC: 0x{fourCC:X}). Supported formats: DXT1, DXT3, DXT5, ATI2.")
                 };
 
                 byte[] pixelData = new byte[fileBytes.Length - 128];

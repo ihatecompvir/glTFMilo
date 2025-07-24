@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using MiloGLTFUtils.Source;
 
 namespace glTFMilo.Source
 {
@@ -11,7 +12,7 @@ namespace glTFMilo.Source
                 // Sanity check
                 if (options == null)
                 {
-                    Console.WriteLine("Unknown error from parsing arguments");
+                    Logger.Error("Unknown error from parsing arguments");
                     return;
                 }
 
@@ -27,7 +28,7 @@ namespace glTFMilo.Source
                 }
                 else
                 {
-                    Console.WriteLine("Unsupported file type. Please provide a .milo, .glb, or .gltf file.");
+                    Logger.Error("Unsupported file type. Please provide a .milo, .glb, or .gltf file.");
                 }
             });
         }

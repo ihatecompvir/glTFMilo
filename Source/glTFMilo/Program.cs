@@ -2,6 +2,7 @@
 using MiloLib;
 using MiloLib.Assets;
 using MiloLib.Assets.Char;
+using MiloLib.Assets.P9;
 using MiloLib.Assets.Rnd;
 using MiloLib.Classes;
 using SharpGLTF.Memory;
@@ -24,24 +25,25 @@ namespace MiloGLTFUtils.Source.glTFMilo
             string preLit = opts.Prelit.ToLower();
             string outfitConfig = opts.OutfitConfig.ToLower();
             string type = opts.Type.ToLower();
+            string report = opts.Report.ToLower();
             bool ignoreLimits = opts.IgnoreTexSizeLimits;
 
             if (!File.Exists(filePath))
             {
-                Console.WriteLine("File does not exist.");
+                Logger.Error("File does not exist.");
                 return;
             }
 
             if (!filePath.EndsWith(".gltf") && !filePath.EndsWith(".glb"))
             {
-                Console.WriteLine("File is not a glTF file.");
+                Logger.Error("File is not a glTF file.");
                 return;
             }
 
             // if they set an outfitconfig, check it exists
             if (!string.IsNullOrEmpty(outfitConfig) && !File.Exists(outfitConfig))
             {
-                Console.WriteLine($"Specified OutfitConfig file {outfitConfig} does not exist.");
+                Logger.Error($"Specified OutfitConfig file {outfitConfig} does not exist.");
                 return;
             }
 
@@ -60,7 +62,7 @@ namespace MiloGLTFUtils.Source.glTFMilo
             }
             else
             {
-                Console.WriteLine("Invalid game specified. Defaulting to Rock Band 3.");
+                Logger.Warn("Invalid game specified. Defaulting to Rock Band 3.");
             }
 
             var model = ModelRoot.Load(filePath);
@@ -81,7 +83,7 @@ namespace MiloGLTFUtils.Source.glTFMilo
             }
             else
             {
-                Console.WriteLine("Invalid platform specified. Defaulting to Xbox.");
+                Logger.Warn("Invalid platform specified. Defaulting to Xbox.");
                 meta.platform = DirectoryMeta.Platform.Xbox;
             }
 
@@ -129,53 +131,76 @@ namespace MiloGLTFUtils.Source.glTFMilo
                                 if (primitive.Material != null)
                                 {
                                     mesh.mat = primitive.Material.Name + ".mat";
+                                    bool hasDiffuse = primitive.Material.FindChannel("BaseColor")?.Texture != null;
+                                    bool hasNormal = primitive.Material.FindChannel("Normal")?.Texture != null;
+                                    bool hasSpecular = primitive.Material.FindChannel("SpecularColor")?.Texture != null;
+
+                                    if (!hasDiffuse || (!hasDiffuse && !hasNormal && !hasSpecular))
+                                    {
+                                        Logger.Error($"Mesh {node.Name} is missing a diffuse map or has no maps at all! The model will likely appear black in-game!");
+                                    }
                                 }
                                 IList<System.Numerics.Vector3> positions = null;
                                 try { positions = primitive.GetVertexAccessor("POSITION")?.AsVector3Array(); }
                                 catch (Exception e)
                                 {
-                                    Console.WriteLine($"Error reading POSITION: {e.Message}");
-                                    Console.WriteLine("POSITION data will be improper.");
+                                    Logger.Error($"Error reading POSITION: {e.Message}");
+                                    Logger.Error("POSITION data will be improper.");
                                 }
 
                                 IList<System.Numerics.Vector3> normals = null;
                                 try { normals = primitive.GetVertexAccessor("NORMAL")?.AsVector3Array(); }
                                 catch (Exception e)
                                 {
-                                    Console.WriteLine($"Error reading NORMAL: {e.Message}");
-                                    Console.WriteLine("NORMAL data will be improper.");
+                                    Logger.Error($"Error reading NORMAL: {e.Message}");
+                                    Logger.Error("NORMAL data will be improper.");
+                                }
+
+                                // sanity check on vertex normals
+                                // either they are null or are all 0, either case is bad
+                                if (normals == null || normals.Count == 0 ||
+                                    normals.All(n => n.X == 0 && n.Y == 0 && n.Z == 0))
+                                {
+                                    Logger.Error($"Mesh {node.Name} has none or all-zero vertex normals. The model will likely appear black in-game!");
                                 }
 
                                 IList<System.Numerics.Vector2> uvs = null;
                                 try { uvs = primitive.GetVertexAccessor("TEXCOORD_0")?.AsVector2Array(); }
                                 catch (Exception e)
                                 {
-                                    Console.WriteLine($"Error reading TEXCOORD_0: {e.Message}");
-                                    Console.WriteLine("UV data will be improper.");
+                                    Logger.Error($"Error reading TEXCOORD_0: {e.Message}");
+                                    Logger.Error("UV data will be improper.");
+                                }
+
+                                // sanity check on uvs
+                                // either they are null or are all 0, either case is bad
+                                if (uvs == null || uvs.Count == 0 || uvs.All(uv => uv.X == 0 && uv.Y == 0))
+                                {
+                                    Logger.Error($"Mesh {node.Name} has no UVs or all-zero UVs. The model will likely have very distorted textures!");
                                 }
 
                                 IList<System.Numerics.Vector4> tangents = null;
                                 try { tangents = primitive.GetVertexAccessor("TANGENT")?.AsVector4Array(); }
                                 catch (Exception e)
                                 {
-                                    Console.WriteLine($"Error reading TANGENT: {e.Message}");
-                                    Console.WriteLine("TANGENT data will be improper.");
+                                    Logger.Error($"Error reading TANGENT: {e.Message}");
+                                    Logger.Error("TANGENT data will be improper.");
                                 }
 
                                 IList<System.Numerics.Vector4> weights = null;
                                 try { weights = primitive.GetVertexAccessor("WEIGHTS_0")?.AsVector4Array(); }
                                 catch (Exception e)
                                 {
-                                    Console.WriteLine($"Error reading WEIGHTS_0: {e.Message}");
-                                    Console.WriteLine("WEIGHTS data will be improper.");
+                                    Logger.Error($"Error reading WEIGHTS_0: {e.Message}");
+                                    Logger.Error("WEIGHTS data will be improper.");
                                 }
 
                                 IList<System.Numerics.Vector4> joints = null;
                                 try { joints = primitive.GetVertexAccessor("JOINTS_0")?.AsVector4Array(); }
                                 catch (Exception e)
                                 {
-                                    Console.WriteLine($"Error reading JOINTS_0: {e.Message}");
-                                    Console.WriteLine("JOINTS data will be improper.");
+                                    Logger.Error($"Error reading JOINTS_0: {e.Message}");
+                                    Logger.Error("JOINTS data will be improper.");
                                 }
 
                                 IList<System.Numerics.Vector4> colors = null;
@@ -185,8 +210,8 @@ namespace MiloGLTFUtils.Source.glTFMilo
                                     try { colors = colorsAccessor.AsVector4Array(); }
                                     catch (Exception e)
                                     {
-                                        Console.WriteLine($"Error reading COLOR_0: {e.Message}");
-                                        Console.WriteLine("COLOR data will be improper.");
+                                        Logger.Error($"Error reading COLOR_0: {e.Message}");
+                                        Logger.Error("COLOR data will be improper.");
                                     }
                                 }
 
@@ -194,8 +219,8 @@ namespace MiloGLTFUtils.Source.glTFMilo
                                 try { indices = primitive.IndexAccessor?.AsIndicesArray(); }
                                 catch (Exception e)
                                 {
-                                    Console.WriteLine($"Error reading indices: {e.Message}");
-                                    Console.WriteLine("Index data will be improper.");
+                                    Logger.Error($"Error reading indices: {e.Message}");
+                                    Logger.Error("Cannot continue creating mesh.");
                                 }
 
 
@@ -369,7 +394,8 @@ namespace MiloGLTFUtils.Source.glTFMilo
                     }
                     else
                     {
-                        Console.WriteLine($"{node.Name} has no mesh but is a mesh node. Can not convert glTF.");
+                        Logger.Error($"{node.Name} has no mesh but is a mesh node. Can not convert glTF.");
+                        return;
                     }
                 }
                 else if (NodeHelpers.IsBone(node, model))
@@ -426,7 +452,6 @@ namespace MiloGLTFUtils.Source.glTFMilo
                 }
                 else if (NodeHelpers.IsLightNode(node, model))
                 {
-                    Console.WriteLine("Node is Light Node, create RndLight");
                     RndLight light = new RndLight();
 
                     // todo: remove this reflection stuff eventually
@@ -898,7 +923,7 @@ namespace MiloGLTFUtils.Source.glTFMilo
                 }
                 else
                 {
-                    Console.WriteLine($"Specified OutfitConfig file {opts.OutfitConfig} does not exist.");
+                    Logger.Error($"Specified OutfitConfig file {opts.OutfitConfig} does not exist.");
                     return;
                 }
 
@@ -993,11 +1018,16 @@ namespace MiloGLTFUtils.Source.glTFMilo
                 }
             }
 
-
             if (opts.Type == "character" || opts.Type == "instrument")
             {
                 Character character = Character.New(GameRevisions.GetRevision(selectedGame).CharacterRevision, 0);
                 character.viewports = new();
+
+                if (opts.Type == "instrument")
+                {
+                    character.objFields.type = "outfit_variation";
+                    character.inlineProxy = true;
+                }
 
                 if (opts.Type == "character")
                 {
@@ -1006,12 +1036,6 @@ namespace MiloGLTFUtils.Source.glTFMilo
                         // include an absolute reference to char_shared which will link the skeleton bones to this milo
                         character.subDirs.Add("../../shared/char_shared.milo");
                     }
-                }
-
-                if (opts.Type == "instrument")
-                {
-                    character.objFields.type = "outfit_variation";
-                    character.inlineProxy = true;
                 }
 
                 // default empty viewports, still not sure what viewports even are
@@ -1096,7 +1120,69 @@ namespace MiloGLTFUtils.Source.glTFMilo
                 miloFile.Save(opts.Output, MiloFile.Type.Uncompressed, 0x810, MiloLib.Utils.Endian.LittleEndian, MiloLib.Utils.Endian.BigEndian);
             }
 
-            Console.WriteLine("Milo scene created at " + opts.Output);
+            if (report == "true")
+            {
+                // Report summary
+                int meshCount = meta.entries.Count(e => e.type == "Mesh");
+                int texCount = meta.entries.Count(e => e.type == "Tex");
+                int matCount = meta.entries.Count(e => e.type == "Mat");
+                int groupCount = meta.entries.Count(e => e.type == "Group");
+
+                Logger.Info("===== glTFMilo Report =====");
+                Logger.Info($"Game: {selectedGame}");
+                Logger.Info($"Type: {type}");
+                Logger.Info("===== Counts =====");
+                Logger.Info($"Meshes created: {meshCount}");
+                Logger.Info($"Textures created: {texCount}");
+                Logger.Info($"Materials created: {matCount}");
+                Logger.Info($"Groups created: {groupCount}");
+                Logger.Info($"OutfitConfig created: {meta.entries.Count(e => e.type == "OutfitConfig")}");
+                Logger.Info($"Lights created: {meta.entries.Count(e => e.type == "Light")}");
+
+                Logger.Info("===== Object Info =====");
+                foreach (var matEntry in meta.entries.Where(e => e.type == "Mat"))
+                {
+                    var mat = (RndMat)matEntry.obj;
+                    Logger.Info($"Material: {matEntry.name}");
+                    Logger.Info($"  Has Diffuse Map: {!string.IsNullOrEmpty(mat.diffuseTex)}");
+                    Logger.Info($"  Has Normal Map: {!string.IsNullOrEmpty(mat.normalMap)}");
+                    Logger.Info($"  Has Specular Map: {!string.IsNullOrEmpty(mat.specularMap)}");
+                }
+
+                foreach (var meshEntry in meta.entries.Where(e => e.type == "Mesh"))
+                {
+                    var mesh = (RndMesh)meshEntry.obj;
+                    Logger.Info($"Mesh: {meshEntry.name}");
+                    Logger.Info($"  Is Rigged: {mesh.boneTransforms.Count > 0}");
+
+                    if (mesh.boneTransforms != null && mesh.boneTransforms.Count > 0)
+                    {
+                        Logger.Info("  Influencing Bones:");
+                        foreach (var bone in mesh.boneTransforms)
+                        {
+                            Logger.Info($"    {bone.name}");
+                        }
+                    }
+                }
+
+                foreach (var cfg in meta.entries.Where(e => e.type == "OutfitConfig"))
+                {
+                    Logger.Info($"OutfitConfig: {cfg.name}");
+                    var config = (OutfitConfig)cfg.obj;
+                    if (config.matSwaps != null)
+                    {
+                        Logger.Info($"  Material Swaps: {config.matSwaps.Count}");
+                    }
+                    if (config.overlays != null)
+                    {
+                        Logger.Info($"  Overlays: {config.overlays.Count}");
+                    }
+                }
+
+                Logger.Info("===================================");
+            }
+
+            Logger.Success("Milo scene created at " + opts.Output);
         }
     }
 }

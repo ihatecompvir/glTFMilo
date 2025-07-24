@@ -32,5 +32,8 @@ namespace glTFMilo.Source
 
         [Option("type", Required = false, HelpText = "What the intention of the output Milo is. Supported values are character, venue, instrument, or other. Default is other.")]
         public string Type { get; set; } = "other";
+
+        [Option("report", Required = false, HelpText = "Whether or not to print a report after completion.")]
+        public string Report { get; set; } = string.Empty;
     }
 }
