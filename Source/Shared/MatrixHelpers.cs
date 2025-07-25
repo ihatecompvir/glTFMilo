@@ -5,7 +5,7 @@ using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace glTFMilo.Source
+namespace MiloGLTFUtils.Source.Shared
 {
     public class MatrixHelpers
     {

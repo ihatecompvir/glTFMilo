@@ -2,11 +2,10 @@
 using TeximpNet;
 using MiloGLTFUtils.Source;
 
-namespace glTFMilo.Source
+namespace MiloGLTFUtils.Source.glTFMilo.Core
 {
     public class TextureUtils
     {
-        // TODO: put these into their own class or something instead of randomyly at the top of this
         public static bool ConvertToDDS(Stream inputStream, string outputPath, CompressionFormat format, bool ignoreLimits = false)
         {
             if (inputStream.CanSeek)

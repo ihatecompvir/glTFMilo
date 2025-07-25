@@ -1,4 +1,6 @@
 ﻿using glTFMilo.Source;
+using MiloGLTFUtils.Source.glTFMilo.Core;
+using MiloGLTFUtils.Source.Shared;
 using MiloLib;
 using MiloLib.Assets;
 using MiloLib.Assets.Char;
@@ -346,8 +348,6 @@ namespace MiloGLTFUtils.Source.glTFMilo
 
                             }
 
-
-
                             // write bone transforms
                             var skin = node.Skin;
                             if (skin != null)
@@ -400,92 +400,15 @@ namespace MiloGLTFUtils.Source.glTFMilo
                 }
                 else if (NodeHelpers.IsBone(node, model))
                 {
-                    if (node.Name == "neutral_bone") continue; // skip the neutral bone
-                    if (type == "character")
-                    {
-                        // check if the bone name is in the list of rb3 skeleton bones, and ignore it if so
-                        if (BoneNames.rb3SkeletonBones.Contains(node.Name))
-                        {
-                            continue;
-                        }
-                    }
-                    RndTrans trans = RndTrans.New(9, 0);
-                    trans.objFields.revision = 2;
-                    string parentNodeName = NodeHelpers.GetParentBoneName(node, model);
-
-                    MatrixHelpers.CopyMatrix(node.LocalMatrix, trans.localXfm);
-                    MatrixHelpers.CopyMatrix(node.WorldMatrix, trans.worldXfm);
-
-                    if (parentNodeName != null)
-                    {
-                        trans.parentObj = parentNodeName;
-                    }
-                    else
-                    {
-                        trans.parentObj = meta.name;
-                    }
-
-                    DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Trans", node.Name, trans);
-                    meta.entries.Add(entry);
+                    NodeProcessor.ProcessBoneNode(node, model, meta, type, filename);
                 }
                 else if (NodeHelpers.IsGroupNode(node, model))
                 {
-                    if (node.Name == "Armature")
-                        continue; // skip the armature node, it is not a group node in the sense we want to export
-                    RndGroup grp = RndGroup.New(GameRevisions.GetRevision(selectedGame).GroupRevision, 0);
-                    grp.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
-                    grp.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
-                    grp.objFields.revision = 2;
-                    grp.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
-                    List<string> children = NodeHelpers.GetAllDescendantNames(node);
-                    if (children.Count > 0)
-                    {
-                        foreach (var child in children)
-                        {
-                            // add all children to the grp if its not null
-                            if (child != null)
-                                grp.objects.Add(child);
-                        }
-                    }
-                    DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Group", node.Name + ".grp", grp);
-                    meta.entries.Add(entry);
+                    NodeProcessor.ProcessGroupNode(node, model, meta, selectedGame);
                 }
                 else if (NodeHelpers.IsLightNode(node, model))
                 {
-                    RndLight light = new RndLight();
-
-                    // todo: remove this reflection stuff eventually
-                    typeof(RndLight)
-                        .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                        .SetValue(light, GameRevisions.GetRevision(selectedGame).LightRevision);
-                    light.objFields.revision = 2;
-                    light.range = node.PunctualLight.Range;
-                    light.colorOwner = node.Name + ".lit";
-                    light.color = new HmxColor4(node.PunctualLight.Color.X, node.PunctualLight.Color.Y, node.PunctualLight.Color.Z, 1.0f);
-                    switch (node.PunctualLight.LightType)
-                    {
-                        case PunctualLightType.Point:
-                            light.type = RndLight.Type.kPoint;
-                            break;
-                        case PunctualLightType.Spot:
-                            light.type = RndLight.Type.kSpot;
-                            break;
-                        case PunctualLightType.Directional:
-                            light.type = RndLight.Type.kDirectional;
-                            break;
-                        default:
-                            light.type = RndLight.Type.kPoint;
-                            break;
-                    }
-
-                    // set light transform
-                    light.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
-
-                    MatrixHelpers.CopyMatrix(node.LocalMatrix, light.trans.localXfm);
-                    MatrixHelpers.CopyMatrix(node.WorldMatrix, light.trans.worldXfm);
-
-                    DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Light", node.Name + ".lit", light);
-                    meta.entries.Add(entry);
+                    NodeProcessor.ProcessLightNode(node, meta, selectedGame);
                 }
                 else
                 {
@@ -749,7 +672,6 @@ namespace MiloGLTFUtils.Source.glTFMilo
 
 
                 // emissive map
-                /*
                 var emissiveChannel = material.FindChannel("Emissive");
                 var emissiveMapTexture = emissiveChannel?.Texture;
 
@@ -807,14 +729,13 @@ namespace MiloGLTFUtils.Source.glTFMilo
                     DirectoryMeta.Entry emissiveTexEntry = new DirectoryMeta.Entry("Tex", material.Name + "_emissive.tex", emissiveTex);
                     meta.entries.Add(emissiveTexEntry);
                 }
-                */
 
 
                 // specular color map
                 var specularColorMapTexture = material.FindChannel("SpecularColor")?.Texture;
                 var specularColor = material.FindChannel("SpecularColor");
 
-                /*
+
                 RndTex specularColorMapTex = RndTex.New(GameRevisions.GetRevision(selectedGame).TextureRevision, 0);
                 specularColorMapTex.objFields.revision = 2;
 
@@ -866,7 +787,7 @@ namespace MiloGLTFUtils.Source.glTFMilo
                     DirectoryMeta.Entry specularTexEntry = new DirectoryMeta.Entry("Tex", material.Name + "_spec.tex", specularColorMapTex);
                     meta.entries.Add(specularTexEntry);
                 }
-                */
+
 
                 if (specularColor != null)
                 {
@@ -908,279 +829,26 @@ namespace MiloGLTFUtils.Source.glTFMilo
             }
 
             // if they specified an OutfitConfig, create it
-            if (opts.Type == "character" && opts.OutfitConfig != null && opts.OutfitConfig != string.Empty)
-            {
-                OutfitConfig config = new OutfitConfig();
-                typeof(OutfitConfig)
-                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                    .SetValue(config, GameRevisions.GetRevision(selectedGame).OutfitConfigRevision);
-
-                OutfitConfigJSON outfitConfigJSON;
-                if (File.Exists(opts.OutfitConfig))
-                {
-                    string json = File.ReadAllText(opts.OutfitConfig);
-                    outfitConfigJSON = System.Text.Json.JsonSerializer.Deserialize<OutfitConfigJSON>(json);
-                }
-                else
-                {
-                    Logger.Error($"Specified OutfitConfig file {opts.OutfitConfig} does not exist.");
-                    return;
-                }
-
-                if (outfitConfigJSON != null)
-                {
-
-                    config.objFields.revision = 2;
-
-                    config.computeAO = outfitConfigJSON.ComputeAO;
-
-                    // mat swaps
-                    if (outfitConfigJSON.MatSwaps != null && outfitConfigJSON.MatSwaps.Count > 0)
-                    {
-                        foreach (var swap in outfitConfigJSON.MatSwaps)
-                        {
-                            OutfitConfig.MatSwap matSwap = new OutfitConfig.MatSwap();
-                            matSwap.resourceMat = swap.ResourceMat;
-                            matSwap.mat = swap.Mat;
-                            matSwap.twoColorDiffuse = swap.TwoColorDiffuseTex;
-                            matSwap.twoColorMask = swap.TwoColorMaskTex;
-                            matSwap.twoColorInterp = swap.TwoColorInterpTex;
-
-                            if (swap.Textures != null && swap.Textures.Count > 0)
-                            {
-                                matSwap.textures = new List<Symbol>();
-                                foreach (var tex in swap.Textures)
-                                {
-                                    matSwap.textures.Add(tex);
-                                }
-                            }
-
-                            if (swap.Color1Palette != null && swap.Color1Palette.Count > 0)
-                            {
-                                // create a new ColorPalette
-                                ColorPalette pal = new ColorPalette();
-                                typeof(ColorPalette)
-                                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                                    .SetValue(pal, (ushort)1);
-                                pal.objFields.revision = 2;
-                                pal.colors = new List<HmxColor4>();
-                                foreach (var color in swap.Color1Palette)
-                                {
-                                    pal.colors.Add(new HmxColor4(color.R, color.G, color.B, color.A));
-                                }
-                                DirectoryMeta.Entry palEntry = new DirectoryMeta.Entry("ColorPalette", "outfit_config_pal1.pal", pal);
-                                meta.entries.Add(palEntry);
-
-                                matSwap.color1Palette = palEntry.name;
-                            }
-
-                            if (swap.Color2Palette != null && swap.Color2Palette.Count > 0)
-                            {
-                                // create a new ColorPalette
-                                ColorPalette pal = new ColorPalette();
-                                typeof(ColorPalette)
-                                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                                    .SetValue(pal, (ushort)1);
-                                pal.objFields.revision = 2;
-                                pal.colors = new List<HmxColor4>();
-                                foreach (var color in swap.Color2Palette)
-                                {
-                                    pal.colors.Add(new HmxColor4(color.R, color.G, color.B, color.A));
-                                }
-                                DirectoryMeta.Entry palEntry = new DirectoryMeta.Entry("ColorPalette", "outfit_config_pal2.pal", pal);
-                                meta.entries.Add(palEntry);
-                                matSwap.color2Palette = palEntry.name;
-                            }
-                        }
-                    }
-
-                    if (outfitConfigJSON.Overlays != null && outfitConfigJSON.Overlays.Count > 0)
-                    {
-                        config.overlays = new List<OutfitConfig.Overlay>();
-                        foreach (var overlay in outfitConfigJSON.Overlays)
-                        {
-                            OutfitConfig.Overlay overlayEntry = new OutfitConfig.Overlay();
-                            overlayEntry.category = overlay.Category;
-                            overlayEntry.texture = overlay.Texture;
-                            config.overlays.Add(overlayEntry);
-                        }
-                    }
-
-                    config.texBlender = outfitConfigJSON.TexBlender;
-                    config.wrinkleBlender = outfitConfigJSON.WrinkleBlender;
-                    config.bandLogo = outfitConfigJSON.BandLogo;
-
-
-
-
-                    DirectoryMeta.Entry entry = new DirectoryMeta.Entry("OutfitConfig", "outfig_config.cfg", config);
-                    meta.entries.Add(entry);
-                }
-            }
+            OutfitConfigBuilder.BuildOutfitConfig(opts, selectedGame, meta);
 
             if (opts.Type == "character" || opts.Type == "instrument")
             {
-                Character character = Character.New(GameRevisions.GetRevision(selectedGame).CharacterRevision, 0);
-                character.viewports = new();
-
-                if (opts.Type == "instrument")
-                {
-                    character.objFields.type = "outfit_variation";
-                    character.inlineProxy = true;
-                }
-
-                if (opts.Type == "character")
-                {
-                    if (selectedGame == MiloGame.RockBand3)
-                    {
-                        // include an absolute reference to char_shared which will link the skeleton bones to this milo
-                        character.subDirs.Add("../../shared/char_shared.milo");
-                    }
-                }
-
-                // default empty viewports, still not sure what viewports even are
-                character.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                character.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                character.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                character.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                character.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                character.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                character.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                character.currentViewportIdx = 6;
-
-                character.objFields.revision = 2;
-
-                // give it a huge radius so it will always appear
-                character.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
-                character.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
-                character.draw.sphere.radius = 10000.0f;
-                character.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
-                character.sphereBase = meta.name;
-
-                character.charTest = Character.CharacterTesting.New(GameRevisions.GetRevision(selectedGame).CharacterTestingRevision, 0);
-                character.charTest.distMap = "none";
-
-
-                // reflection hack to set revisions until I implement something proper in MiloLib
-                // TODO: GET RID OF THIS SHIT
-                typeof(RndDir)
-                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                    .SetValue(character, GameRevisions.GetRevision(selectedGame).RndDirRevision);
-
-                typeof(ObjectDir)
-                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                    .SetValue(character, GameRevisions.GetRevision(selectedGame).ObjectDirRevision);
-
-                // todo: restore this but use the git commit hash
-                //character.objFields.note = "Milo created with Program";
-
-
-
-                meta.directory = character;
-
-
-                MiloFile miloFile = new MiloFile(meta);
-
-                miloFile.Save(opts.Output, MiloFile.Type.Uncompressed, 0x810, MiloLib.Utils.Endian.LittleEndian, MiloLib.Utils.Endian.BigEndian);
+                DirBuilder.BuildCharacterDirectory(opts, selectedGame, meta);
             }
             else
             {
-                RndDir rndDir = new RndDir(0, 0);
-                rndDir.viewports = new();
-
-                // default empty viewports, still not sure what viewports even are
-                rndDir.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                rndDir.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                rndDir.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                rndDir.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                rndDir.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                rndDir.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                rndDir.viewports.Add(new Matrix() { m11 = 1.0f, m12 = 0.0f, m13 = 0.0f, m21 = 0.0f, m22 = 1.0f, m23 = 0.0f, m31 = 0.0f, m32 = 0.0f, m33 = 1.0f, m41 = 0.0f, m42 = 0.0f, m43 = 0.0f });
-                rndDir.currentViewportIdx = 6;
-                rndDir.objFields.revision = 2;
-                rndDir.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
-                rndDir.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
-                rndDir.draw.sphere.radius = 10000.0f;
-                rndDir.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
-
-
-                typeof(ObjectDir)
-                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                    .SetValue(rndDir, GameRevisions.GetRevision(selectedGame).ObjectDirRevision);
-
-                typeof(RndDir)
-                    .GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
-                    .SetValue(rndDir, GameRevisions.GetRevision(selectedGame).RndDirRevision);
-
-                meta.directory = rndDir;
-
-
-                MiloFile miloFile = new MiloFile(meta);
-
-                miloFile.Save(opts.Output, MiloFile.Type.Uncompressed, 0x810, MiloLib.Utils.Endian.LittleEndian, MiloLib.Utils.Endian.BigEndian);
+                DirBuilder.BuildRndDirectory(opts, selectedGame, meta);
             }
+
+            MiloFile miloFile = new MiloFile(meta);
+
+            miloFile.Save(opts.Output, MiloFile.Type.Uncompressed, 0x810, MiloLib.Utils.Endian.LittleEndian, MiloLib.Utils.Endian.BigEndian);
 
             if (report == "true")
             {
-                // Report summary
-                int meshCount = meta.entries.Count(e => e.type == "Mesh");
-                int texCount = meta.entries.Count(e => e.type == "Tex");
-                int matCount = meta.entries.Count(e => e.type == "Mat");
-                int groupCount = meta.entries.Count(e => e.type == "Group");
-
-                Logger.Info("===== glTFMilo Report =====");
-                Logger.Info($"Game: {selectedGame}");
-                Logger.Info($"Type: {type}");
-                Logger.Info("===== Counts =====");
-                Logger.Info($"Meshes created: {meshCount}");
-                Logger.Info($"Textures created: {texCount}");
-                Logger.Info($"Materials created: {matCount}");
-                Logger.Info($"Groups created: {groupCount}");
-                Logger.Info($"OutfitConfig created: {meta.entries.Count(e => e.type == "OutfitConfig")}");
-                Logger.Info($"Lights created: {meta.entries.Count(e => e.type == "Light")}");
-
-                Logger.Info("===== Object Info =====");
-                foreach (var matEntry in meta.entries.Where(e => e.type == "Mat"))
-                {
-                    var mat = (RndMat)matEntry.obj;
-                    Logger.Info($"Material: {matEntry.name}");
-                    Logger.Info($"  Has Diffuse Map: {!string.IsNullOrEmpty(mat.diffuseTex)}");
-                    Logger.Info($"  Has Normal Map: {!string.IsNullOrEmpty(mat.normalMap)}");
-                    Logger.Info($"  Has Specular Map: {!string.IsNullOrEmpty(mat.specularMap)}");
-                }
-
-                foreach (var meshEntry in meta.entries.Where(e => e.type == "Mesh"))
-                {
-                    var mesh = (RndMesh)meshEntry.obj;
-                    Logger.Info($"Mesh: {meshEntry.name}");
-                    Logger.Info($"  Is Rigged: {mesh.boneTransforms.Count > 0}");
-
-                    if (mesh.boneTransforms != null && mesh.boneTransforms.Count > 0)
-                    {
-                        Logger.Info("  Influencing Bones:");
-                        foreach (var bone in mesh.boneTransforms)
-                        {
-                            Logger.Info($"    {bone.name}");
-                        }
-                    }
-                }
-
-                foreach (var cfg in meta.entries.Where(e => e.type == "OutfitConfig"))
-                {
-                    Logger.Info($"OutfitConfig: {cfg.name}");
-                    var config = (OutfitConfig)cfg.obj;
-                    if (config.matSwaps != null)
-                    {
-                        Logger.Info($"  Material Swaps: {config.matSwaps.Count}");
-                    }
-                    if (config.overlays != null)
-                    {
-                        Logger.Info($"  Overlays: {config.overlays.Count}");
-                    }
-                }
-
-                Logger.Info("===================================");
+                ReportGenerator.Generate(meta, selectedGame, type);
             }
+
 
             Logger.Success("Milo scene created at " + opts.Output);
         }

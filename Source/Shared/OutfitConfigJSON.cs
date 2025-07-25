@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-namespace MiloGLTFUtils.Source
+namespace MiloGLTFUtils.Source.Shared
 {
     public class OutfitConfigJSON
     {

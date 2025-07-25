@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace glTFMilo.Source
+namespace MiloGLTFUtils.Source.Shared
 {
     public enum MiloGame
     {
