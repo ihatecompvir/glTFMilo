@@ -9,8 +9,10 @@ using MiloLib.Assets.Rnd;
 using MiloLib.Classes;
 using SharpGLTF.Memory;
 using SharpGLTF.Schema2;
+using System;
 using System.Numerics;
 using System.Reflection;
+using System.Text.Json;
 using TeximpNet;
 using TeximpNet.Compression;
 
@@ -91,7 +93,7 @@ namespace MiloGLTFUtils.Source.glTFMilo
 
             meta.revision = GameRevisions.GetRevision(selectedGame).MiloRevision;
 
-            if (opts.Type == "character" || opts.Type == "instrument")
+            if (opts.Type == "character" || opts.Type == "instrument" || opts.Type == "dancer")
                 meta.type = "Character";
             else
                 meta.type = "RndDir";
@@ -109,14 +111,19 @@ namespace MiloGLTFUtils.Source.glTFMilo
                         int primitiveIndex = 0;
                         foreach (var primitive in node.Mesh.Primitives)
                         {
+                            string overridenFilename;
+                            if (primitiveIndex == 0)
+                                overridenFilename = $"{node.Name}.mesh";
+                            else
+                                overridenFilename = $"{node.Name}_{primitiveIndex}.mesh";
 
-                            RndMesh mesh = RndMesh.New(33, 0, 0, 0);
+                            RndMesh mesh = RndMesh.New(GameRevisions.GetRevision(selectedGame).ModelRevision, 0, 0, 0);
                             mesh.objFields.revision = 2;
                             mesh.trans = RndTrans.New(9, 0);
                             mesh.trans.parentObj = filename;
                             mesh.draw = RndDrawable.New(3, 0);
                             mesh.draw.sphere = new Sphere();
-                            mesh.draw.sphere.radius = 10000.0f;
+                            mesh.draw.sphere.radius = 0.0f;
 
                             mesh.volume = RndMesh.Volume.kVolumeTriangles;
 
@@ -125,6 +132,23 @@ namespace MiloGLTFUtils.Source.glTFMilo
 
                             MatrixHelpers.CopyMatrix(node.LocalMatrix, mesh.trans.localXfm);
                             MatrixHelpers.CopyMatrix(node.WorldMatrix, mesh.trans.worldXfm);
+
+                            // set vertex flags for compression, but only if its RB3
+                            if (selectedGame == MiloGame.RockBand3 || selectedGame == MiloGame.DanceCentral1)
+                            {
+                                if (platform == "xbox")
+                                {
+                                    mesh.vertices.isNextGen = true;
+                                    mesh.vertices.compressionType = 1;
+                                    mesh.vertices.vertexSize = 36;
+                                }
+                                else if (platform == "ps3")
+                                {
+                                    mesh.vertices.isNextGen = true;
+                                    mesh.vertices.compressionType = 2;
+                                    mesh.vertices.vertexSize = 40;
+                                }
+                            }
 
                             List<string> influencingJoints = new List<string>();
 
@@ -295,14 +319,6 @@ namespace MiloGLTFUtils.Source.glTFMilo
                                         newVert.weight3 = weight.W;
 
                                     }
-                                    else if (colors != null && originalIndex < colors.Count)
-                                    {
-                                        var vertexColors = colors[(int)originalIndex];
-                                        newVert.weight0 = vertexColors.X;
-                                        newVert.weight1 = vertexColors.Y;
-                                        newVert.weight2 = vertexColors.Z;
-                                        newVert.weight3 = vertexColors.W;
-                                    }
                                     else
                                     {
                                         newVert.weight0 = 0.0f;
@@ -311,16 +327,76 @@ namespace MiloGLTFUtils.Source.glTFMilo
                                         newVert.weight3 = 0.0f;
                                     }
 
+                                    newVert.vertexColors = new HmxColor4();
+                                    if (colors != null && originalIndex < colors.Count)
+                                    {
+                                        var vertexColors = colors[(int)originalIndex];
+                                        newVert.vertexColors.r = vertexColors.X;
+                                        newVert.vertexColors.g = vertexColors.Y;
+                                        newVert.vertexColors.b = vertexColors.Z;
+                                        newVert.vertexColors.a = vertexColors.W;
+                                    }
+
                                     if (joints != null && originalIndex < joints.Count)
                                     {
                                         var joint = joints[(int)originalIndex];
 
                                         // use the index of the influencing bone name to set the bone indices
-                                        newVert.bone0 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.X].Name);
-                                        newVert.bone1 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.Y].Name);
-                                        newVert.bone2 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.Z].Name);
-                                        newVert.bone3 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.W].Name);
+                                        if (mesh.vertices.compressionType == 1)
+                                        {
+                                            newVert.bone0 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.W].Name);
+                                            newVert.bone1 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.Z].Name);
+                                            newVert.bone2 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.Y].Name);
+                                            newVert.bone3 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.X].Name);
+                                        }
+                                        else
+                                        {
+                                            newVert.bone0 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.X].Name);
+                                            newVert.bone1 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.Y].Name);
+                                            newVert.bone2 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.Z].Name);
+                                            newVert.bone3 = (ushort)influencingJoints.IndexOf(node.Skin.Joints[(int)joint.W].Name);
+                                        }
+
+                                        // check none of the bones are now maxValue
+                                        ushort lastValidBone = 0;
+
+                                        if (newVert.bone0 != 0xFFFF)
+                                        {
+                                            lastValidBone = newVert.bone0;
+                                        }
+                                        else
+                                        {
+                                            newVert.bone0 = lastValidBone;
+                                        }
+
+                                        if (newVert.bone1 != 0xFFFF)
+                                        {
+                                            lastValidBone = newVert.bone1;
+                                        }
+                                        else
+                                        {
+                                            newVert.bone1 = lastValidBone;
+                                        }
+
+                                        if (newVert.bone2 != 0xFFFF)
+                                        {
+                                            lastValidBone = newVert.bone2;
+                                        }
+                                        else
+                                        {
+                                            newVert.bone2 = lastValidBone;
+                                        }
+
+                                        if (newVert.bone3 != 0xFFFF)
+                                        {
+                                            lastValidBone = newVert.bone3;
+                                        }
+                                        else
+                                        {
+                                            newVert.bone3 = lastValidBone;
+                                        }
                                     }
+
 
                                     mesh.vertices.vertices.Add(newVert);
                                     ushort newIndex = (ushort)(mesh.vertices.vertices.Count - 1);
@@ -373,20 +449,29 @@ namespace MiloGLTFUtils.Source.glTFMilo
                                 mesh.boneTransforms = boneTransList;
                             }
 
-
-
-                            if (primitiveIndex == 0)
+                            // add group sizes for the face counts
+                            // group sizes are a byte, so we must split it into groups of 255
+                            uint numFaces = (uint)mesh.faces.Count;
+                            mesh.groupSizes.Clear();
+                            while (numFaces > 0)
                             {
-                                DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name + ".mesh", mesh);
-                                mesh.geomOwner = entry.name;
-                                meta.entries.Add(entry);
+                                if (numFaces >= 255)
+                                {
+                                    mesh.groupSizes.Add(255);
+                                    numFaces -= 255;
+                                }
+                                else
+                                {
+                                    mesh.groupSizes.Add((byte)numFaces);
+                                    numFaces = 0;
+                                }
                             }
-                            else
-                            {
-                                DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", node.Name + "_" + primitiveIndex + ".mesh", mesh);
-                                mesh.geomOwner = entry.name;
-                                meta.entries.Add(entry);
-                            }
+
+                            MiloExtras.AddToMesh(node, mesh, ref overridenFilename);
+
+                            DirectoryMeta.Entry entry = new DirectoryMeta.Entry("Mesh", overridenFilename, mesh);
+                            mesh.geomOwner = entry.name;
+                            meta.entries.Add(entry);
 
 
                             primitiveIndex++;
@@ -424,6 +509,91 @@ namespace MiloGLTFUtils.Source.glTFMilo
                 }
             }
 
+            foreach (var anim in model.LogicalAnimations)
+            {
+                bool isTransformOnly = anim.Channels.All(channel =>
+                    channel.TargetNodePath.ToString() == "translation" ||
+                    channel.TargetNodePath.ToString() == "rotation" ||
+                    channel.TargetNodePath.ToString() == "scale"
+                );
+
+                if (isTransformOnly)
+                {
+                    // make sure all channels influence the same Node
+                    string targetNode = anim.Channels[0].TargetNode.Name;
+                    foreach (var channel in anim.Channels)
+                    {
+                        if (channel.TargetNode.Name != targetNode)
+                        {
+                            Logger.Error($"Animation {anim.Name} has channels that target different nodes.");
+                            continue;
+                        }
+                    }
+                    // we are just animating the transform, so we can use a TransAnim for this
+                    RndTransAnim transAnim = new RndTransAnim();
+
+                    // use reflection to set the revision
+                    typeof(RndTransAnim).GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(transAnim, (UInt16)7);
+
+                    transAnim.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
+
+                    // use 30 fps animations
+                    transAnim.anim.rate = RndAnimatable.Rate.k30_fps;
+
+                    transAnim.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
+                    transAnim.draw.sphere.radius = 0.0f;
+
+                    transAnim.trans = targetNode + ".mesh";
+                    transAnim.keysOwner = anim.Name + ".tnm";
+
+                    transAnim.objFields.revision = 2;
+
+                    // loop through all channels and add the keys to the transAnim
+                    foreach (var channel in anim.Channels)
+                    {
+                        if (channel.TargetNodePath.ToString() == "translation")
+                        {
+                            foreach (var key in channel.GetTranslationSampler().GetLinearKeys().ToList())
+                            {
+                                transAnim.transKeys.Add(new PropKey.Vec3Key
+                                {
+                                    pos = key.Key,
+                                    vec = new MiloLib.Classes.Vector3(key.Value.X, key.Value.Y, key.Value.Z),
+                                });
+                            }
+                        }
+                        else if (channel.TargetNodePath.ToString() == "rotation")
+                        {
+                            foreach (var key in channel.GetRotationSampler().GetLinearKeys().ToList())
+                            {
+                                var propKey = new PropKey.QuatKey
+                                {
+                                    pos = key.Key,
+                                    quat = new MiloLib.Classes.Vector4(key.Value.X, key.Value.Y, key.Value.Z),
+                                };
+                                propKey.quat.w = key.Value.W;
+                                transAnim.rotKeys.Add(propKey);
+                            }
+                        }
+                        else if (channel.TargetNodePath.ToString() == "scale")
+                        {
+                            foreach (var key in channel.GetScaleSampler().GetLinearKeys().ToList())
+                            {
+                                transAnim.scaleKeys.Add(new PropKey.Vec3Key
+                                {
+                                    pos = key.Key,
+                                    vec = new MiloLib.Classes.Vector3(key.Value.X, key.Value.Y, key.Value.Z),
+                                });
+                            }
+                        }
+                    }
+
+
+                    DirectoryMeta.Entry entry = new DirectoryMeta.Entry("TransAnim", anim.Name + ".tnm", transAnim);
+                    meta.entries.Add(entry);
+
+                }
+            }
             /*
             // TODO: finish this
             if (bandConfigurationPositions.Count != 0)
@@ -799,6 +969,28 @@ namespace MiloGLTFUtils.Source.glTFMilo
                 {
                     mat.specularPower = (float)specularFactor.Value.Parameters[0].Value;
                 }
+
+                // handle material extras
+                if (material.Extras != null)
+                {
+                    string extrasJson = material.Extras.ToString();
+                    var matExtras = JsonSerializer.Deserialize<MaterialExtras>(extrasJson);
+
+                    // if they don't explicitly pass the prelit option, we should try to get it from extras
+                    if (preLit == string.Empty)
+                        mat.preLit = matExtras?.Prelit == 1;
+                    mat.alphaCut = matExtras?.AlphaCut == 1;
+                    mat.alphaThreshold = (int)(matExtras?.AlphaThreshold ?? 0.0f * 255.0f);
+                    mat.alphaWrite = matExtras?.AlphaWrite == 1;
+                    mat.zMode = (RndMat.ZMode)matExtras?.ZMode;
+                    mat.blend = (RndMat.Blend)matExtras?.BlendMode;
+                    mat.useEnviron = matExtras?.UseEnvironment == 1;
+                    mat.emissiveMultiplier = matExtras?.EmissiveMultiplier ?? 1.0f;
+                    mat.cull = matExtras?.Cull == 1;
+                    mat.pointLights = matExtras?.PointLights == 1;
+                    mat.normalDetailMap = matExtras?.NormalDetailMap ?? string.Empty;
+                    mat.shaderVariation = (RndMat.ShaderVariation)(matExtras?.ShaderVariation ?? (int)RndMat.ShaderVariation.kShaderVariationNone);
+                }
             }
 
 
@@ -811,7 +1003,7 @@ namespace MiloGLTFUtils.Source.glTFMilo
                 allGeomGrp.trans = RndTrans.New(GameRevisions.GetRevision(selectedGame).TransRevision, 0);
                 allGeomGrp.draw = RndDrawable.New(GameRevisions.GetRevision(selectedGame).DrawableRevision, 0);
                 allGeomGrp.draw.sphere = new Sphere();
-                allGeomGrp.draw.sphere.radius = 10000.0f;
+                allGeomGrp.draw.sphere.radius = 0.0f;
                 allGeomGrp.anim = RndAnimatable.New(GameRevisions.GetRevision(selectedGame).AnimatableRevision, 0);
 
                 allGeomGrp.objFields.revision = 2;
@@ -831,7 +1023,7 @@ namespace MiloGLTFUtils.Source.glTFMilo
             // if they specified an OutfitConfig, create it
             OutfitConfigBuilder.BuildOutfitConfig(opts, selectedGame, meta);
 
-            if (opts.Type == "character" || opts.Type == "instrument")
+            if (opts.Type == "character" || opts.Type == "instrument" || opts.Type == "dancer")
             {
                 DirBuilder.BuildCharacterDirectory(opts, selectedGame, meta);
             }

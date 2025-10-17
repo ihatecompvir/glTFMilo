@@ -7,8 +7,10 @@ using SharpGLTF.Schema2;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace MiloGLTFUtils.Source.glTFMilo.Core
@@ -41,6 +43,8 @@ namespace MiloGLTFUtils.Source.glTFMilo.Core
         {
             if (node.Name == "Armature") return;
 
+            string overriddenFilename = node.Name + ".grp";
+
             var rev = GameRevisions.GetRevision(game);
 
             var group = RndGroup.New(rev.GroupRevision, 0);
@@ -55,12 +59,17 @@ namespace MiloGLTFUtils.Source.glTFMilo.Core
                 if (child != null) group.objects.Add(child);
             }
 
-            meta.entries.Add(new DirectoryMeta.Entry("Group", node.Name + ".grp", group));
+            // handle extras
+            MiloExtras.AddToGroup(node, group, ref overriddenFilename);
+
+            meta.entries.Add(new DirectoryMeta.Entry("Group", overriddenFilename, group));
         }
 
         public static void ProcessLightNode(Node node, DirectoryMeta meta, MiloGame game)
         {
             var rev = GameRevisions.GetRevision(game);
+
+            string overriddenFilename = node.Name + ".lit";
 
             var light = new RndLight();
             typeof(RndLight).GetField("revision", BindingFlags.NonPublic | BindingFlags.Instance)
@@ -83,7 +92,9 @@ namespace MiloGLTFUtils.Source.glTFMilo.Core
             MatrixHelpers.CopyMatrix(node.LocalMatrix, light.trans.localXfm);
             MatrixHelpers.CopyMatrix(node.WorldMatrix, light.trans.worldXfm);
 
-            meta.entries.Add(new DirectoryMeta.Entry("Light", node.Name + ".lit", light));
+            MiloExtras.AddToObject(node, light, ref overriddenFilename);
+
+            meta.entries.Add(new DirectoryMeta.Entry("Light", overriddenFilename, light));
         }
     }
 }

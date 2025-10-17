@@ -8,11 +8,12 @@ namespace MiloGLTFUtils.Source.Shared
 {
     public enum MiloGame
     {
-        RockBand3,
-        TheBeatlesRockBand,
-        RockBand2,
-        RockBand1,
-        GreenDayRockBand,
+        RockBand3 = 0,
+        DanceCentral1 = 0,
+        TheBeatlesRockBand = 1,
+        RockBand2 = 2,
+        RockBand1 = 3,
+        GreenDayRockBand = 4
     }
     public struct GameRevisions
     {
@@ -21,7 +22,7 @@ namespace MiloGLTFUtils.Source.Shared
             new GameRevisions(
                 MiloGame.RockBand3,
                 rndDir: 10,
-                model: 33,
+                model: 38,
                 objDir: 27,
                 trans: 9,
                 draw: 3,
