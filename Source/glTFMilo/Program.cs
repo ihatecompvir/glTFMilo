@@ -165,6 +165,11 @@ namespace MiloGLTFUtils.Source.glTFMilo
                                     {
                                         Logger.Error($"Mesh {node.Name} is missing a diffuse map or has no maps at all! The model will likely appear black in-game!");
                                     }
+
+                                    if (hasNormal)
+                                    {
+                                        mesh.hasAOCalculation = true;
+                                    }
                                 }
                                 IList<System.Numerics.Vector3> positions = null;
                                 try { positions = primitive.GetVertexAccessor("POSITION")?.AsVector3Array(); }
@@ -404,6 +409,14 @@ namespace MiloGLTFUtils.Source.glTFMilo
                                     if (mesh.vertices.vertices.Count > ushort.MaxValue)
                                     {
                                         Console.Error.WriteLine("Warning: Vertex count exceeds ushort.MaxValue!");
+                                    }
+
+                                    if (mesh.hasAOCalculation)
+                                    {
+                                        newVert.vertexColors.r = 255.0f;
+                                        newVert.vertexColors.g = 255.0f;
+                                        newVert.vertexColors.b = 255.0f;
+                                        newVert.vertexColors.a = 255.0f;
                                     }
 
                                     originalIndexToNewIndex[originalIndex] = newIndex;
