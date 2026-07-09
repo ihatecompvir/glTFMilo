@@ -15,9 +15,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="bin\**" />
+    <Compile Remove="obj\**" />
     <Compile Remove="external\**" />
+    <Compile Remove="temp\**" />
+    <Compile Remove="tools\**" />
+    <EmbeddedResource Remove="bin\**" />
+    <EmbeddedResource Remove="obj\**" />
     <EmbeddedResource Remove="external\**" />
+    <EmbeddedResource Remove="temp\**" />
+    <EmbeddedResource Remove="tools\**" />
+    <None Remove="bin\**" />
+    <None Remove="obj\**" />
     <None Remove="external\**" />
+    <None Remove="temp\**" />
+    <None Remove="tools\**" />
   </ItemGroup>
 
   <ItemGroup>

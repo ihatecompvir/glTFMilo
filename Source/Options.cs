@@ -35,5 +35,8 @@ namespace glTFMilo.Source
 
         [Option("report", Required = false, HelpText = "Whether or not to print a report after completion.")]
         public string Report { get; set; } = string.Empty;
+
+        [Option("disable-splitting", Required = false, HelpText = "Debug flag. Disables splitting hair strands at branch points, reverting to full root-to-leaf chains that duplicate shared bones across strands. If hair doesn't look right, please let me know and then try it with this on.")]
+        public bool DisableSplitting { get; set; } = false;
     }
 }

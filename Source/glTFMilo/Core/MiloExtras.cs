@@ -1,35 +1,35 @@
-﻿using System;
+﻿using MiloLib.Assets;
+using MiloLib.Assets.Rnd;
+using SharpGLTF.Schema2;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using MiloLib.Assets;
-using MiloLib.Assets.Rnd;
-using SharpGLTF.Schema2;
 namespace MiloGLTFUtils.Source.glTFMilo.Core
 {
     public class MiloExtras
     {
-        [JsonPropertyName("filename")]
-        public string Filename { get; set; }
+        [JsonPropertyName("milo_filename")]
+        public string Filename { get; set; } = string.Empty;
 
-        [JsonPropertyName("obj_type")]
-        public string ObjectType { get; set; }
-
-        [JsonPropertyName("note")]
-        public string Note { get; set; }
-        [JsonPropertyName("is_showing")]
+        [JsonPropertyName("milo_obj_type")]
+        public string ObjectType { get; set; } = string.Empty;
+        [JsonPropertyName("milo_note")]
+        public string Note { get; set; } = string.Empty;
+        [JsonPropertyName("milo_is_showing")]
         public int IsShowing { get; set; }
 
-        [JsonPropertyName("draw_order")]
+        [JsonPropertyName("milo_draw_order")]
         public float DrawOrder { get; set; }
 
-        [JsonPropertyName("custom_sphere_radius")]
+        [JsonPropertyName("milo_sphere_radius")]
         public float SphereRadius { get; set; }
 
-        [JsonPropertyName("custom_sphere_center")]
+        [JsonPropertyName("milo_sphere_center")]
         public float[] SphereCenter { get; set; } = new float[3];
 
         public static void AddToObject(Node node, MiloLib.Assets.Object obj, ref string fileName)
@@ -115,6 +115,7 @@ namespace MiloGLTFUtils.Source.glTFMilo.Core
                         group.objFields.type = miloExtras.ObjectType;
                     if (miloExtras.Note != null && miloExtras.Note != string.Empty)
                         group.objFields.note = miloExtras.Note;
+
                     // drawable
                     group.draw.showing = miloExtras?.IsShowing == 1;
                     group.draw.drawOrder = miloExtras?.DrawOrder ?? 0;
@@ -125,6 +126,34 @@ namespace MiloGLTFUtils.Source.glTFMilo.Core
                 }
             }
         }
+
+    }
+
+    public class CharHairExtras
+    {
+        // default wind name, used by all venues and vignettes afaict
+        public const string DefaultWind = "world.wind";
+
+        [JsonPropertyName("milo_hair_stiffness")]
+        public float Stiffness { get; set; } = 0.04f;
+
+        [JsonPropertyName("milo_hair_torsion")]
+        public float Torsion { get; set; } = 0.1f;
+
+        [JsonPropertyName("milo_hair_inertia")]
+        public float Inertia { get; set; } = 0.7f;
+
+        [JsonPropertyName("milo_hair_gravity")]
+        public float Gravity { get; set; } = 1.0f;
+
+        [JsonPropertyName("milo_hair_friction")]
+        public float Friction { get; set; } = 0.3f;
+
+        [JsonPropertyName("milo_hair_weight")]
+        public float Weight { get; set; } = 0.5f;
+
+        [JsonPropertyName("milo_hair_wind")]
+        public string Wind { get; set; } = DefaultWind;
     }
 
     public class MaterialExtras
@@ -153,7 +182,7 @@ namespace MiloGLTFUtils.Source.glTFMilo.Core
         public int ProjectedLights { get; set; }
 
         [JsonPropertyName("milo_material_type")]
-        public string MaterialType { get; set; }
+        public string MaterialType { get; set; } = string.Empty;
 
         [JsonPropertyName("milo_shader_variation")]
         public int ShaderVariation { get; set; }
@@ -161,6 +190,6 @@ namespace MiloGLTFUtils.Source.glTFMilo.Core
         [JsonPropertyName("milo_material_prelit")]
         public int Prelit { get; set; }
         [JsonPropertyName("milo_normal_detail_map")]
-        public string NormalDetailMap { get; set; }
+        public string NormalDetailMap { get; set; } = string.Empty;
     }
 }
