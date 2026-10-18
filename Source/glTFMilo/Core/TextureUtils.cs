@@ -1,5 +1,6 @@
 ﻿using TeximpNet.Compression;
 using TeximpNet;
+using SkiaSharp;
 using MiloGLTFUtils.Source;
 
 namespace MiloGLTFUtils.Source.glTFMilo.Core
@@ -11,29 +12,59 @@ namespace MiloGLTFUtils.Source.glTFMilo.Core
             if (inputStream.CanSeek)
                 inputStream.Position = 0;
 
-            Surface image = Surface.LoadFromStream(inputStream);
-            if (image == null)
-                throw new InvalidOperationException("Failed to load input image from stream. Ensure the stream contains a valid image format supported by TeximpNet.");
+            // Decode with SkiaSharp forcing straight alpha (Unpremul) to match Photoshop behavior, Thanks Rulas, for noticing this.
+            using var codec = SKCodec.Create(inputStream);
+            if (codec == null)
+                throw new InvalidOperationException("Failed to load input image from stream. Ensure the stream contains a valid image format supported by SkiaSharp.");
 
-            if (image.Width % 4 != 0 || image.Height % 4 != 0)
-                throw new InvalidOperationException($"Invalid image dimensions for BC1 compression. Width and height must be multiples of 4. Current: {image.Width}x{image.Height}. Please resize your image accordingly.");
+            var srcInfo = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+            using var sourceImage = SKBitmap.Decode(codec, srcInfo);
+            if (sourceImage == null)
+                throw new InvalidOperationException("Failed to load input image from stream. Ensure the stream contains a valid image format supported by SkiaSharp.");
+
+            if (sourceImage.Width % 4 != 0 || sourceImage.Height % 4 != 0)
+                throw new InvalidOperationException($"Invalid image dimensions for BC1 compression. Width and height must be multiples of 4. Current: {sourceImage.Width}x{sourceImage.Height}. Please resize your image accordingly.");
+
+            SKBitmap finalBitmap = sourceImage;
+            SKBitmap resizedBitmap = null;
 
             // check if either dimension is larger than 2048 x 2048 (which seems to be the limit to textures in Milo)
-            if (image.Width > 512 || image.Height > 512)
+            if (sourceImage.Width > 512 || sourceImage.Height > 512)
             {
                 // if ignoreLimits is true, we can ignore this and just allow the texture to be larger
                 if (!ignoreLimits)
                 {
-                    float scale = Math.Min(512f / image.Width, 512f / image.Height);
-                    int newWidth = (int)(image.Width * scale);
-                    int newHeight = (int)(image.Height * scale);
-                    bool succeeded = image.Resize(newWidth, newHeight, ImageFilter.Lanczos3);
+                    float scale = Math.Min(512f / sourceImage.Width, 512f / sourceImage.Height);
+                    int newWidth = (int)(sourceImage.Width * scale);
+                    int newHeight = (int)(sourceImage.Height * scale);
+
+                    var dstInfo = new SKImageInfo(newWidth, newHeight, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+                    resizedBitmap = new SKBitmap(dstInfo);
+
+                    // Resize using Nearest Neighbor filtering
+                    bool succeeded = sourceImage.ScalePixels(resizedBitmap, new SKSamplingOptions(SKFilterMode.Nearest));
                     if (!succeeded)
                     {
+                        resizedBitmap.Dispose();
                         throw new InvalidOperationException($"Image exceeded size limits (512x512) and failed to auto-resize to {newWidth}x{newHeight}. Try manually resizing the image or check for invalid image data.");
                     }
+
+                    finalBitmap = resizedBitmap;
                 }
             }
+
+            // Transfer the image to TeximpNet Surface via MemoryStream
+            using var skImage = SKImage.FromBitmap(finalBitmap);
+            using var data = skImage.Encode(SKEncodedImageFormat.Png, 100);
+            using var tempStream = new MemoryStream();
+            data.SaveTo(tempStream);
+            tempStream.Position = 0;
+
+            resizedBitmap?.Dispose();
+
+            using Surface image = Surface.LoadFromStream(tempStream);
+            if (image == null)
+                throw new InvalidOperationException("Failed to load input image from stream. Ensure the stream contains a valid image format supported by TeximpNet.");
 
             image.FlipVertically();
 
@@ -42,7 +73,6 @@ namespace MiloGLTFUtils.Source.glTFMilo.Core
                 compressor.Input.GenerateMipmaps = false;
                 compressor.Input.SetData(image);
                 compressor.Compression.Format = format;
-
 
                 using (var memoryStream = new MemoryStream())
                 {
